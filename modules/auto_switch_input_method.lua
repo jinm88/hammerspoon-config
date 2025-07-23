@@ -10,15 +10,16 @@ local ABC = 'com.apple.keylayout.ABC'
 
 -- 定义你自己想要自动切换输入法的 app
 local APP_TO_IME = {
+  ['/Applications/Alfred 5.app'] = ABC,
   ['/Applications/Terminal.app'] = ABC ,
   ['/Applications/iTerm.app'] = ABC,
   ['/Applications/Visual Studio Code.app'] = ABC,
   ['/Applications/Sublime Text.app'] = ABC,
   ['/Applications/CotEditor.app'] = ABC,
   ['/Applications/WebStorm.app'] = ABC,
+  ['/Applications/Arc.app'] = ABC,
   ['/Applications/Google Chrome.app'] = Pinyin,
   ['/Applications/Microsoft Edge.app'] = Pinyin,
-  ['/Applications/Arc.app'] = Pinyin,
   ['/Applications/Obsidian.app'] = Pinyin,
   ['/Applications/Microsoft To Do.app'] = Pinyin,
   ['/Applications/QQ.app'] = Pinyin,

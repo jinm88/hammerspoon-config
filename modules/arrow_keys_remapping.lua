@@ -4,13 +4,17 @@
 
 -- --------------------------------------------------
 -- 修饰键
-local MODS = { 'rShift' }
+local MODS = { 'rCtrl' }
 -- 映射
 local MAPPING = {
   up    = 'w',
   down  = 's',
   left  = 'a',
   right = 'd',
+  pageup = 'r',
+  pagedown = 'f',
+  home = 'q',
+  ['end'] = 'e'
 }
 -- --------------------------------------------------
 
