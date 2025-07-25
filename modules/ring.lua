@@ -6,8 +6,8 @@
 -- 2. 滑动鼠标选中目标 app 后松开 alt 键跳到目标 app
 -- **************************************************
 
-local utils = require('./utils')
-local tween = require('./tween')
+local utils = require('modules.utils')
+local tween = require('modules.tween')
 
 -- --------------------------------------------------
 -- 自定义配置
