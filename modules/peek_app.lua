@@ -6,9 +6,9 @@ local hiddenTimestamp = nil
 -- 定义超时时间（秒），5分钟 = 300秒
 local HIDE_TIMEOUT_SECONDS = 300
 
--- 设置快捷键：Option + `
+-- 设置快捷键：Option + tab
 -- 您可以根据自己的喜好修改这里的快捷键
-hs.hotkey.bind({"alt"}, "`", function()
+hs.hotkey.bind({"alt"}, "tab", function()
     local currentFrontApp = hs.application.frontmostApplication()
     local currentTime = os.time() -- 获取当前Unix时间戳
 
