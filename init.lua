@@ -1,3 +1,6 @@
+-- 配置定位服务权限，获取wifi需要用到
+-- print(hs.location.get())
+
 -- require('modules.caffeine')
 -- require('modules.launchpad_shortcut_fix')
 -- require('modules.ring')
@@ -9,3 +12,4 @@ require('modules.defeating_paste_blocking')
 require('modules.input_method_indicator')
 require('modules.magspeed_smooth_scrolling_fix')
 require('modules.peek_app')
+require('modules.wifi_status')

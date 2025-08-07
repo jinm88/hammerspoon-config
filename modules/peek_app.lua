@@ -3,8 +3,8 @@
 local lastHiddenAppPID = nil
 -- 用于存储应用被隐藏时的时间戳（Unix时间，秒）
 local hiddenTimestamp = nil
--- 定义超时时间（秒），5分钟 = 300秒
-local HIDE_TIMEOUT_SECONDS = 300
+-- 定义超时时间（秒）
+local HIDE_TIMEOUT_SECONDS = 1800
 
 -- 设置快捷键：Option + tab
 -- 您可以根据自己的喜好修改这里的快捷键
