@@ -4,7 +4,7 @@
 
 -- --------------------------------------------------
 -- 修饰键
-local MODS = { 'rCtrl' }
+local MODS = { 'rCmd' }
 -- 映射
 local MAPPING = {
   up    = 'w',

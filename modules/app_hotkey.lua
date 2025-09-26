@@ -1,23 +1,35 @@
--- 修饰键
-local MODS = { 'rCmd' }
--- 映射
-local APP_MAPPING = {
-  a = 'Safari',             -- rCmd + A 打开 Safari
-  s = 'Slack',              -- rCmd + S 打开 Slack
-  d = 'iTerm',              -- rCmd + D 打开 iTerm (或 'Terminal')
-  f = 'Finder',             -- rCmd + F 打开 Finder
-  c = 'Visual Studio Code', -- rCmd + C 打开 VS Code
-  n = 'Notion',             -- rCmd + N 打开 Notion
-  o = 'Obsidian',           -- rCmd + O 打开 Obsidian
-  w = 'WeChat',             -- rCmd + W 打开微信
-  m = 'Mail',               -- rCmd + M 打开 Mail 应用
+--[[
+  Hammerspoon 应用快速启动配置
+  功能：使用自定义热键快速启动或切换到常用应用。
+  使用列表（数组）结构来存储应用配置。
+--]]
+
+-- 2. 应用列表 (使用列表结构，每个元素包含 name, mods, key 和可选的 desc)
+local APP_LIST = {
+  { name = 'Arc', mods = {'lCmd'}, key = 'f1'},
+  { name = 'Chrome', mods = {'lCmd'}, key = 'f2'},
+  { name = 'TickTick', mods = {'lCmd'}, key = 'f3', desc = '滴答清单'},
+  { name = 'Obsidian', mods = {'lCmd'}, key = 'f4'},
+  { name = 'iTerm', mods = {'lCmd'}, key = 'f5'},
+  { name = 'Sublime', mods = {'lCmd'}, key = 'f6'},
+  { name = 'Visual Studio Code', mods = {'lCmd'}, key = 'f7', desc = 'VSCode'},
+
+  { name = 'WeChat', mods = {'rShift'}, key = 'w', desc = '微信'},
+  -- 你可以在这里继续添加更多应用
 }
+
 ----------------------------------------------------
 
+-- 加载 LeftRightHotkey Spoon，用于区分左右修饰键
 hs.loadSpoon('LeftRightHotkey')
 
--- 4. 绑定热键逻辑
-for key, appName in pairs(APP_MAPPING) do
+-- 3. 绑定热键逻辑
+-- 使用 ipairs 遍历列表
+for _, appConfig in ipairs(APP_LIST) do
+  local mods = appConfig.mods
+  local key = appConfig.key
+  local appName = appConfig.name
+
   -- 定义热键处理函数
   local launchHandler = function()
     -- 使用 hs.application.launchOrFocus() 函数：
@@ -26,15 +38,43 @@ for key, appName in pairs(APP_MAPPING) do
 
     -- 如果应用未找到或启动失败，发出通知
     if not app then
-      hs.notify.show('Hammerspoon', '应用启动失败', '未找到应用或启动失败: ' .. appName, 'Beep')
+      hs.alert.show('未找到应用或启动失败: ' .. appName)
     end
   end
 
   -- 使用 LeftRightHotkey:bind 进行绑定。
-  -- 我们将启动逻辑放在 pressedFn (按下时执行)，
+  -- 将启动逻辑放在 pressedFn (按下时执行)，
   -- 释放和点击函数设置为 nil，以实现最快的响应速度。
-  spoon.LeftRightHotkey:bind(MODS, key, launchHandler, nil, nil)
+  spoon.LeftRightHotkey:bind(mods, key, launchHandler, nil, nil)
 end
+
+-- 4. 绑定显示映射的快捷键 (rShift + /)
+local function showMappingAlert()
+  local message = ""
+  -- 遍历 APP_LIST 列表并构建通知内容
+  for _, appConfig in ipairs(APP_LIST) do
+    -- 关键修正：使用 table.concat 将修饰键表连接成字符串，用 " + " 分隔
+    local modsString = table.concat(appConfig.mods, ' + ')
+    
+    -- 修正逻辑：优先使用 desc，如果 desc 是 nil 或空字符串，则使用 name 作为显示名称
+    local displayName = appConfig.name
+    if appConfig.desc and appConfig.desc ~= '' then
+        displayName = appConfig.desc
+    end
+    
+    -- 构建消息格式：mods + key - 显示名称 (desc/name)
+    message = message .. string.format("%s + %s - %s\n", modsString, appConfig.key, displayName)
+  end
+
+  if #message > 0 then
+    message = message:sub(1, #message - 1)
+  end
+
+  hs.alert.show(message)
+end
+
+local displayKey = '/'
+spoon.LeftRightHotkey:bind({'rShift'}, displayKey, showMappingAlert, nil, nil)
 
 -- 5. 启动 LeftRightHotkey 监听
 spoon.LeftRightHotkey:start()
