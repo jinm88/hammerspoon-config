@@ -6,6 +6,7 @@
 -- require('modules.ring')
 -- require('modules.wifi_mute')
 
+require('modules.app_hotkey')
 require('modules.arrow_keys_remapping')
 require('modules.auto_switch_input_method')
 require('modules.defeating_paste_blocking')
