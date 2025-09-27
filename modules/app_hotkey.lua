@@ -6,16 +6,15 @@
 
 -- 2. 应用列表 (使用列表结构，每个元素包含 name, mods, key 和可选的 desc)
 local APP_LIST = {
-  { name = 'Arc', mods = {'lCmd'}, key = 'f1'},
-  { name = 'Chrome', mods = {'lCmd'}, key = 'f2'},
-  { name = 'TickTick', mods = {'lCmd'}, key = 'f3', desc = '滴答清单'},
-  { name = 'Obsidian', mods = {'lCmd'}, key = 'f4'},
-  { name = 'iTerm', mods = {'lCmd'}, key = 'f5'},
-  { name = 'Sublime', mods = {'lCmd'}, key = 'f6'},
-  { name = 'Visual Studio Code', mods = {'lCmd'}, key = 'f7', desc = 'VSCode'},
+  { name = 'Google Chrome', mods = {'lCmd'}, key = 'f1', desc = 'Chrome'},
+  { name = 'iTerm', mods = {'lCmd'}, key = 'f2'},
+  { name = 'Sublime Text', mods = {'lCmd'}, key = 'f3', desc = 'Sublime'},
+  { name = 'Visual Studio Code', mods = {'lCmd'}, key = 'f4', desc = 'VSCode'},
 
-  { name = 'WeChat', mods = {'rShift'}, key = 'w', desc = '微信'},
-  -- 你可以在这里继续添加更多应用
+  { name = 'Arc', mods = {'lCtrl'}, key = 'f1'},
+  { name = 'TickTick', mods = {'lCtrl'}, key = 'f2', desc = '滴答清单'},
+  { name = 'Obsidian', mods = {'lCtrl'}, key = 'f3'},
+  { name = 'WeChat', mods = {'lCtrl'}, key = 'f4', desc = '微信'},
 }
 
 ----------------------------------------------------
