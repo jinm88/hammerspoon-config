@@ -73,7 +73,7 @@ local function showMappingAlert()
 end
 
 local displayKey = '/'
-spoon.LeftRightHotkey:bind({'rShift'}, displayKey, showMappingAlert, nil, nil)
+spoon.LeftRightHotkey:bind({'rCtrl'}, displayKey, showMappingAlert, nil, nil)
 
 -- 5. 启动 LeftRightHotkey 监听
 spoon.LeftRightHotkey:start()
