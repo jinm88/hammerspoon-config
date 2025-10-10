@@ -26,6 +26,7 @@ local APP_TO_IME = {
   ['/Applications/WeChat.app'] = Pinyin,
   ['/Applications/企业微信.app'] = Pinyin,
   ['/Applications/DingTalk.app'] = Pinyin,
+  ['/Applications/App.app'] = Pinyin,
 }
 -- --------------------------------------------------
 
