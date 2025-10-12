@@ -31,7 +31,7 @@ local function runOcrTask()
 
             -- 5. 处理结果：自动粘贴或错误提示
             if recognizedText and recognizedText ~= "" then
-                hs.alert.show(recognizedText, {duration = 2})
+                hs.alert.show("[OCR] " .. recognizedText, {duration = 2})
                 -- 如果需要自动粘贴，可以在这里添加粘贴命令，例如：
                 -- hs.eventtap.keyStroke({"cmd"}, "v")
             else

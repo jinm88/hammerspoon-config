@@ -24,9 +24,9 @@ local function draw(colors)
 
 	for i, screen in ipairs(screens) do
 	local frame = screen:fullFrame()
-	local canvasX = frame.x + frame.w - 128
+	local canvasX = frame.x + frame.w - 64
 	local canvasY = frame.y
-	local canvasW = 128
+	local canvasW = 64
 	local canvasH = HEIGHT
 
 	local canvas = hs.canvas.new({ x = canvasX, y = canvasY, w = canvasW, h = canvasH })
@@ -78,6 +78,7 @@ local function updateWifiStatus(sourceID)
 	local wifiName = hs.wifi.currentNetwork()
 	if wifiName == nil then
 		draw(COLORS)
+		hs.alert("[Status] WIFI down")
 	end
 end
 

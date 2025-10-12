@@ -6,16 +6,19 @@
 -- 指示器高度
 local HEIGHT = 4
 -- 指示器透明度
-local ALPHA = 1
+local ALPHA = 0.8
 -- 多个颜色之间线性渐变
 local ALLOW_LINEAR_GRADIENT = false
 -- 指示器颜色
 local IME_TO_COLORS = {
+  -- 系统默认英语
+  ['com.apple.keylayout.ABC'] = {},
   -- 系统自带简中输入法
   ['com.apple.inputmethod.SCIM.ITABC'] = {
-    { hex = '#de2910' },
-    { hex = '#eab308' },
-    { hex = '#0ea5e9' }
+    { hex = '#B22222' }, -- 红
+  },
+  ['com.tencent.inputmethod.wetype.pinyin'] = {
+    { hex = '#228B22' }, -- 绿
   }
 }
 -- --------------------------------------------------
@@ -29,9 +32,14 @@ local function draw(colors)
 
   for i, screen in ipairs(screens) do
     local frame = screen:fullFrame()
-    local canvasX = frame.x + frame.w - 128
+    -- local canvasX = frame.x + frame.w - 128
+    -- local canvasY = frame.y
+    -- local canvasW = 128
+    -- local canvasH = HEIGHT
+
+    local canvasX = frame.x + 10
     local canvasY = frame.y
-    local canvasW = 128
+    local canvasW = 36
     local canvasH = HEIGHT
 
     local canvas = hs.canvas.new({ x = canvasX, y = canvasY, w = canvasW, h = canvasH })
