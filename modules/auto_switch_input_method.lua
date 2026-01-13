@@ -5,28 +5,31 @@
 local utils = require('modules.utils')
 
 -- --------------------------------------------------
-local Pinyin = 'com.apple.inputmethod.SCIM.ITABC'
 local ABC = 'com.apple.keylayout.ABC'
+local Pinyin = 'com.apple.inputmethod.SCIM.ITABC'
+local WeType = 'com.tencent.inputmethod.wetype.pinyin'
+-- defaults read ~/Library/Preferences/com.apple.HIToolbox.plist AppleSelectedInputSources
+local CurrPinyin = Pinyin
 
 -- 定义你自己想要自动切换输入法的 app
 local APP_TO_IME = {
   ['/Applications/Alfred 5.app'] = ABC,
-  ['/Applications/Terminal.app'] = ABC ,
+  ['/Applications/Terminal.app'] = ABC,
   ['/Applications/iTerm.app'] = ABC,
   ['/Applications/Visual Studio Code.app'] = ABC,
   ['/Applications/Sublime Text.app'] = ABC,
   ['/Applications/CotEditor.app'] = ABC,
   ['/Applications/WebStorm.app'] = ABC,
   -- ['/Applications/Arc.app'] = ABC,
-  -- ['/Applications/Google Chrome.app'] = Pinyin,
-  ['/Applications/Microsoft Edge.app'] = Pinyin,
-  ['/Applications/Obsidian.app'] = Pinyin,
-  ['/Applications/Microsoft To Do.app'] = Pinyin,
-  ['/Applications/QQ.app'] = Pinyin,
-  ['/Applications/WeChat.app'] = Pinyin,
-  ['/Applications/企业微信.app'] = Pinyin,
-  ['/Applications/DingTalk.app'] = Pinyin,
-  ['/Applications/App.app'] = Pinyin,
+  -- ['/Applications/Google Chrome.app'] = CurrPinyin,
+  ['/Applications/Microsoft Edge.app'] = CurrPinyin,
+  ['/Applications/Obsidian.app'] = CurrPinyin,
+  ['/Applications/Microsoft To Do.app'] = CurrPinyin,
+  ['/Applications/QQ.app'] = CurrPinyin,
+  ['/Applications/WeChat.app'] = CurrPinyin,
+  ['/Applications/企业微信.app'] = CurrPinyin,
+  ['/Applications/DingTalk.app'] = CurrPinyin,
+  ['/Applications/App.app'] = CurrPinyin,
 }
 -- --------------------------------------------------
 
