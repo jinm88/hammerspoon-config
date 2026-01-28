@@ -6,9 +6,9 @@
 
 -- 2. 应用列表 (使用列表结构，每个元素包含 name, mods, key 和可选的 desc)
 local APP_LIST = {
-  { name = 'Microsoft To Do', mods = {'lOpt'}, key = 'f1', desc = 'To Do'},
-  { name = 'Obsidian', mods = {'lOpt'}, key = 'f2'},
-  { name = 'Google Chrome', mods = {'lOpt'}, key = 'f3', desc = 'Chrome'},
+  { name = 'Google Chrome', mods = {'lOpt'}, key = 'f1', desc = 'Chrome'},
+  { name = 'Microsoft To Do', mods = {'lOpt'}, key = 'f2', desc = 'To Do'},
+  { name = 'Obsidian', mods = {'lOpt'}, key = 'f3'},
   { name = 'Telegram', mods = {'lOpt'}, key = 'f4'},
 
   { name = 'iTerm', mods = {'lCmd'}, key = 'f1'},
