@@ -6,15 +6,15 @@
 
 -- 2. 应用列表 (使用列表结构，每个元素包含 name, mods, key 和可选的 desc)
 local APP_LIST = {
-  { name = 'Google Chrome', mods = {'lCmd'}, key = 'f1', desc = 'Chrome'},
-  { name = 'iTerm', mods = {'lCmd'}, key = 'f2'},
-  { name = 'Sublime Text', mods = {'lCmd'}, key = 'f3', desc = 'Sublime'},
-  { name = 'Visual Studio Code', mods = {'lCmd'}, key = 'f4', desc = 'VSCode'},
+  { name = 'Microsoft To Do', mods = {'lOpt'}, key = 'f1', desc = 'To Do'},
+  { name = 'Obsidian', mods = {'lOpt'}, key = 'f2'},
+  { name = 'Google Chrome', mods = {'lOpt'}, key = 'f3', desc = 'Chrome'},
+  { name = 'Telegram', mods = {'lOpt'}, key = 'f4'},
 
-  { name = 'Arc', mods = {'lCtrl'}, key = 'f1'},
-  { name = 'TickTick', mods = {'lCtrl'}, key = 'f2', desc = '滴答清单'},
-  { name = 'Obsidian', mods = {'lCtrl'}, key = 'f3'},
-  { name = 'WeChat', mods = {'lCtrl'}, key = 'f4', desc = '微信'},
+  { name = 'iTerm', mods = {'lCmd'}, key = 'f1'},
+  { name = 'Sublime Text', mods = {'lCmd'}, key = 'f2', desc = 'Sublime'},
+  { name = 'TRAE CN', mods = {'lCmd'}, key = 'f3'},
+  { name = 'Visual Studio Code', mods = {'lCmd'}, key = 'f4', desc = 'VSCode'},
 }
 
 ----------------------------------------------------
