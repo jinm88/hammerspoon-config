@@ -13,7 +13,7 @@ local APP_LIST = {
 
   { name = 'iTerm', mods = {'lCmd'}, key = 'f1'},
   { name = 'Sublime Text', mods = {'lCmd'}, key = 'f2', desc = 'Sublime'},
-  { name = 'TRAE CN', mods = {'lCmd'}, key = 'f3'},
+  { name = 'Antigravity', mods = {'lCmd'}, key = 'f3'},
   { name = 'Visual Studio Code', mods = {'lCmd'}, key = 'f4', desc = 'VSCode'},
 }
 
