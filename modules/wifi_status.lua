@@ -88,5 +88,21 @@ local wifiWatcher = hs.wifi.watcher.new(updateWifiStatus)
 -- 启动观察者
 wifiWatcher:start()
 
+-- 每5分钟检查一次 WiFi 状态，如果关闭则打开
+local function checkAndEnableWifi()
+	local interfaces = hs.wifi.interfaces()
+	if interfaces and #interfaces > 0 then
+		local currentNetwork = hs.wifi.currentNetwork()
+		if currentNetwork == nil then
+			-- WiFi 未连接，尝试打开 WiFi
+			hs.wifi.setPower(true, interfaces[1])
+			hs.alert("[Auto] 开启 WiFi")
+		end
+	end
+end
+
+local wifiCheckTimer = hs.timer.new(60, checkAndEnableWifi)
+wifiCheckTimer:start()
+
 -- 首次加载脚本时，调用一次更新函数来设置初始状态
 updateWifiStatus()
