@@ -6,36 +6,27 @@ local utils = require('modules.utils')
 
 -- --------------------------------------------------
 local ABC = 'com.apple.keylayout.ABC'
-local Pinyin = 'com.apple.inputmethod.SCIM.ITABC'
+local ApplePinyin = 'com.apple.inputmethod.SCIM.ITABC'
 local WeType = 'com.tencent.inputmethod.wetype.pinyin'
 -- defaults read ~/Library/Preferences/com.apple.HIToolbox.plist AppleSelectedInputSources
-local CurrPinyin = Pinyin
+local Pinyin = ApplePinyin
 
 -- 定义你自己想要自动切换输入法的 app
 local APP_TO_IME = {
-  ['/Applications/Alfred 5.app'] = ABC,
-  ['/Applications/Terminal.app'] = ABC,
---  ['/Applications/iTerm.app'] = ABC,
-  ['/Applications/Visual Studio Code.app'] = ABC,
-  ['/Applications/Sublime Text.app'] = ABC,
-  ['/Applications/CotEditor.app'] = ABC,
-  ['/Applications/WebStorm.app'] = ABC,
-  -- ['/Applications/Arc.app'] = ABC,
-  -- ['/Applications/Google Chrome.app'] = CurrPinyin,
-  ['/Applications/Microsoft Edge.app'] = CurrPinyin,
-  ['/Applications/Obsidian.app'] = CurrPinyin,
-  ['/Applications/Microsoft To Do.app'] = CurrPinyin,
-  ['/Applications/QQ.app'] = CurrPinyin,
-  ['/Applications/WeChat.app'] = CurrPinyin,
-  ['/Applications/企业微信.app'] = CurrPinyin,
-  ['/Applications/DingTalk.app'] = CurrPinyin,
-  ['/Applications/App.app'] = CurrPinyin,
+  ['终端'] = ABC,
+  ['iTerm'] = Pinyin,
+  ['Visual Studio Code'] = ABC,
+  ['Sublime Text'] = ABC,
+  ['CotEditor'] = ABC,
+  ['WebStorm'] = ABC,
+  ['Obsidian'] = Pinyin,
+  ['WeChat'] = Pinyin,
 }
 -- --------------------------------------------------
 
 local function updateFocusedAppInputMethod(appObject)
-  local focusedAppPath = appObject:path()
-  local ime = APP_TO_IME[focusedAppPath]
+  local focusedAppName = appObject:name()
+  local ime = APP_TO_IME[focusedAppName]
 
   if ime then
     hs.keycodes.currentSourceID(ime)
