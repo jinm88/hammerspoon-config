@@ -4,18 +4,21 @@
   使用列表（数组）结构来存储应用配置。
 --]]
 
--- 2. 应用列表 (使用列表结构，每个元素包含 name, mods, key 和可选的 desc)
+-- 导出应用列表供其他模块使用
 local APP_LIST = {
-  { name = 'Microsoft To Do', mods = {'lOpt'}, key = 'f1', desc = 'To Do'},
-  { name = 'Obsidian', mods = {'lOpt'}, key = 'f2'},
-  { name = 'Google Chrome', mods = {'lOpt'}, key = 'f3', desc = 'Chrome'},
-  { name = 'Telegram', mods = {'lOpt'}, key = 'f4'},
+  { mods = {'lOpt'}, key = 'f1', name = 'Microsoft To Do', desc = 'To Do'},
+  { mods = {'lOpt'}, key = 'f2', name = 'Obsidian', desc = 'Obsidian'},
+  { mods = {'lOpt'}, key = 'f3', name = 'Google Chrome', desc = 'Chrome'},
+  { mods = {'lOpt'}, key = 'f4', name = 'Telegram', desc = 'Telegram'},
 
-  { name = 'iTerm', mods = {'lCmd'}, key = 'f1'},
-  { name = 'Sublime Text', mods = {'lCmd'}, key = 'f2', desc = 'Sublime'},
-  { name = 'Antigravity', mods = {'lCmd'}, key = 'f3'},
-  { name = 'Visual Studio Code', mods = {'lCmd'}, key = 'f4', desc = 'VSCode'},
+  { mods = {'lCmd'}, key = 'f1', name = 'iTerm', desc = 'iTerm'},
+  { mods = {'lCmd'}, key = 'f2', name = 'Sublime Text', desc = 'Sublime'},
+  { mods = {'lCmd'}, key = 'f3', name = 'Antigravity', desc = 'Antigravity'},
+  { mods = {'lCmd'}, key = 'f4', name = 'Visual Studio Code', desc = 'VSCode'},
 }
+
+-- 导出配置
+local M = { appList = APP_LIST }
 
 ----------------------------------------------------
 
@@ -24,7 +27,7 @@ hs.loadSpoon('LeftRightHotkey')
 
 -- 3. 绑定热键逻辑
 -- 使用 ipairs 遍历列表
-for _, appConfig in ipairs(APP_LIST) do
+for _, appConfig in ipairs(M.appList) do
   local mods = appConfig.mods
   local key = appConfig.key
   local appName = appConfig.name
@@ -51,7 +54,7 @@ end
 local function showMappingAlert()
   local message = ""
   -- 遍历 APP_LIST 列表并构建通知内容
-  for _, appConfig in ipairs(APP_LIST) do
+  for _, appConfig in ipairs(M.appList) do
     -- 关键修正：使用 table.concat 将修饰键表连接成字符串，用 " + " 分隔
     local modsString = table.concat(appConfig.mods, ' + ')
     
@@ -77,3 +80,5 @@ spoon.LeftRightHotkey:bind({'rCtrl'}, displayKey, showMappingAlert, nil, nil)
 
 -- 5. 启动 LeftRightHotkey 监听
 spoon.LeftRightHotkey:start()
+
+return M
