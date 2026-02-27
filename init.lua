@@ -15,10 +15,19 @@ require('modules.wifi_status')
 
 -- 显示所有快捷键映射
 local function showAllHotkeys()
+  local message = ""
+  
   local appList = package.loaded['modules.app_hotkey'].appList
   local keyList = package.loaded['modules.arrow_keys_remapping'].keyList
 
-  local message = "=== App Hotkeys ===\n"
+  -- 获取当前前台应用信息
+  local frontApp = hs.application.frontmostApplication()
+  local appName = frontApp:name()
+  local appBundleId = frontApp:bundleID()
+  local appPath = frontApp:path()
+
+  message = message .. string.format("%s - %s\n\n", appName, appBundleId, appPath)
+  message = message .. "=== App Hotkeys ===\n"
   local lastMods = nil
   for _, appConfig in ipairs(appList) do
     local modsString = table.concat(appConfig.mods, ' + ')
