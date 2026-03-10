@@ -1,24 +1,28 @@
+-- 关闭 hs.hotkey 的日志输出
+hs.hotkey.setLogLevel('warning')
+
 -- 配置定位服务权限，获取wifi需要用到
 -- print(hs.location.get())
 -- require('modules.caffeine')
 -- require('modules.wifi_mute')
 
-require('modules.ocr')
-require('modules.app_hotkey')
-require('modules.arrow_keys_remapping')
+require('modules.feat_ocr')
+require('modules.hotkey_app')
+require('modules.hotkey_arrow_keys')
 require('modules.auto_switch_input_method')
-require('modules.defeating_paste_blocking')
-require('modules.input_method_indicator')
-require('modules.magspeed_smooth_scrolling_fix')
-require('modules.peek_app')
-require('modules.wifi_status')
+require('modules.auto_switch_audio')
+require('modules.fix_paste_blocking')
+require('modules.indicator_input_method')
+require('modules.fix_smooth_scrolling')
+require('modules.feat_peek_app')
+require('modules.feat_wifi_status')
 
 -- 显示所有快捷键映射
 local function showAllHotkeys()
   local message = ""
   
-  local appList = package.loaded['modules.app_hotkey'].appList
-  local keyList = package.loaded['modules.arrow_keys_remapping'].keyList
+  local appList = package.loaded['modules.hotkey_app'].appList
+  local keyList = package.loaded['modules.hotkey_arrow_keys'].keyList
 
   -- 获取当前前台应用信息
   local frontApp = hs.application.frontmostApplication()

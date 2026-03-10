@@ -13,8 +13,8 @@ local Pinyin = ApplePinyin
 
 -- 定义你自己想要自动切换输入法的 app
 local APP_TO_IME = {
-  ['终端'] = ABC,
-  ['iTerm2'] = Pinyin,
+  ['终端'] = Pinyin,
+  ['iTerm2'] = ABC,
   ['Visual Studio Code'] = ABC,
   ['Sublime Text'] = ABC,
   ['CotEditor'] = ABC,
