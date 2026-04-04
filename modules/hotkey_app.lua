@@ -6,8 +6,8 @@
 
 -- 导出应用列表供其他模块使用
 local APP_LIST = {
-  { mods = {'lOpt'}, key = 'f1', name = 'Microsoft To Do', desc = 'To Do'},
-  { mods = {'lOpt'}, key = 'f2', name = 'Obsidian', desc = 'Obsidian'},
+  { mods = {'lOpt'}, key = 'f1', name = 'Obsidian', desc = 'Obsidian'},
+  { mods = {'lOpt'}, key = 'f2', name = 'Microsoft To Do', desc = 'To Do'},
   { mods = {'lOpt'}, key = 'f3', name = 'Google Chrome', desc = 'Chrome'},
   { mods = {'lOpt'}, key = 'f4', name = 'Telegram', desc = 'Telegram'},
 
