@@ -11,9 +11,9 @@ local APP_LIST = {
   { mods = {'lOpt'}, key = 'f3', name = 'Google Chrome', desc = 'Chrome' },
   { mods = {'lOpt'}, key = 'f4', name = 'Telegram' },
 
-  { mods = {'lCmd'}, key = 'f1', name = 'Ghostty' },
-  { mods = {'lCmd'}, key = 'f2', name = 'iTerm' },
-  { mods = {'lCmd'}, key = 'f3', name = 'Antigravity' },
+  { mods = {'lCmd'}, key = 'f3', name = 'iTerm' },
+  { mods = {'lCmd'}, key = 'f2', name = 'Ghostty' },
+  { mods = {'lCmd'}, key = 'f1', name = 'Antigravity' },
   { mods = {'lCmd'}, key = 'f4', name = 'TRAE CN' },
   { mods = {'lCmd'}, key = 'f5', name = 'Visual Studio Code', desc = 'VSCode' },
 }
