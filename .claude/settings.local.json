@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(git:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(curl -s http://localhost:9090/proxies)",
+      "Bash(curl -s http://localhost:7890/proxies)",
+      "Bash(curl -s --connect-timeout 2 http://localhost:__TRACKED_VAR__/proxies)",
+      "Bash(curl -s \"http://127.0.0.1:9097/proxies\")",
+      "Bash(curl -s --unix-socket /tmp/verge/verge-mihomo.sock \"http://localhost/proxies\")",
+      "Bash(hs -c \"require\\('modules.indicator_proxy'\\)\")",
+      "Bash(lua -c modules/indicator_proxy.lua)"
     ]
   }
 }

@@ -16,6 +16,7 @@ require('modules.indicator_input_method')
 require('modules.fix_smooth_scrolling')
 require('modules.feat_peek_app')
 require('modules.feat_wifi_status')
+require('modules.indicator_proxy')
 
 -- 显示所有快捷键映射
 local function showAllHotkeys()
