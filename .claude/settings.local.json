@@ -9,7 +9,13 @@
       "Bash(curl -s \"http://127.0.0.1:9097/proxies\")",
       "Bash(curl -s --unix-socket /tmp/verge/verge-mihomo.sock \"http://localhost/proxies\")",
       "Bash(hs -c \"require\\('modules.indicator_proxy'\\)\")",
-      "Bash(lua -c modules/indicator_proxy.lua)"
+      "Bash(lua -c modules/indicator_proxy.lua)",
+      "WebFetch(domain:docs.clash-verge.org)",
+      "WebFetch(domain:www.hammerspoon.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:clash-verge-rev.github.io)",
+      "WebFetch(domain:www.clashverge.dev)",
+      "WebFetch(domain:clash.gitbook.io)"
     ]
   }
 }
