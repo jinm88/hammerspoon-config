@@ -31,6 +31,39 @@ function M.isBlacklisted(device)
     return false
 end
 
+local bluetoothWatcher = nil
+
+function M.startWatcher()
+    if bluetoothWatcher then
+        print("[CmdOptSwap] watcher already running")
+        return
+    end
+
+    bluetoothWatcher = hs.bluetooth.watcher.new(function(event, device)
+        print("[CmdOptSwap] bluetooth event:", event)
+        if event == "connected" then
+            print("[CmdOptSwap] device connected:", device.name or "unknown", "vid:", device.vendorID or "n/a")
+            if not M.isBlacklisted(device) then
+                print("[CmdOptSwap] 非黑名单设备，执行交换")
+                M.swapKeyboardModifiers()
+            else
+                print("[CmdOptSwap] 设备在黑名单中，跳过")
+            end
+        end
+    end)
+
+    bluetoothWatcher:start()
+    print("[CmdOptSwap] 蓝牙监听已启动")
+end
+
+function M.stopWatcher()
+    if bluetoothWatcher then
+        bluetoothWatcher:stop()
+        bluetoothWatcher = nil
+        print("[CmdOptSwap] 蓝牙监听已停止")
+    end
+end
+
 -- 交换修饰键
 function M.swapKeyboardModifiers()
     hs.keycodes.masicap(mods_swap)
@@ -50,5 +83,8 @@ local mods_swap_flipped = {
     left = "opt",
     right = "cmd",
 }
+
+-- 自动启动
+M.startWatcher()
 
 return M
