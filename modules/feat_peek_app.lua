@@ -102,4 +102,3 @@ end)
 -- 这个通知只在 Hammerspoon 启动或重载配置时显示
 hs.notify.new({title="Hammerspoon", informativeText="Hammerspoon 窗口管理快捷键已加载：\nOption + Space: 隐藏/激活前台应用（5分钟超时）" }):send()
 
-print("Hammerspoon: Hide/Unhide Frontmost App with timeout hotkey loaded.")

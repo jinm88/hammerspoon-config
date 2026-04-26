@@ -107,19 +107,19 @@ end
 
 -- 输入法变化事件监听
 -- 通过 hs.keycodes.inputSourceChanged 方式监听有时候不触发，直接监听系统事件可以解决，
--- 参考 https://github.com/Hammerspoon/hammerspoon/issues/1499）
+-- 参考 https://github.com/Hammerspoon/hammerspoon/issues/1499
 imi_dn = hs.distributednotifications.new(
   handleInputSourceChanged,
   -- or 'AppleSelectedInputSourcesChangedNotification'
   'com.apple.Carbon.TISNotifySelectedKeyboardInputSourceChanged'
 )
 -- 每秒同步一次，避免由于错过事件监听导致状态不同步
-imi_indicatorSyncTimer = hs.timer.new(1, handleInputSourceChanged)
+-- imi_indicatorSyncTimer = hs.timer.new(1, handleInputSourceChanged)
 -- 屏幕变化时候重新渲染
 imi_screenWatcher = hs.screen.watcher.new(update)
 
 imi_dn:start()
-imi_indicatorSyncTimer:start()
+-- imi_indicatorSyncTimer:start()
 imi_screenWatcher:start()
 
 -- 初始执行一次

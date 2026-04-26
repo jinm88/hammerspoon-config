@@ -1,3 +1,4 @@
+-- 防止麦克风设备切换默认输出。
 -- 1. 配置
 local BLACKLIST = {
     "DJI Mic Mini-1B9775",
@@ -10,7 +11,7 @@ local function initLastValidDevice()
     local currentDev = hs.audiodevice.defaultOutputDevice()
     if currentDev then
         lastValidDeviceUID = currentDev:uid()
-        print("[AudioWatcher] 初始设备:", currentDev:name(), lastValidDeviceUID)
+        print("[AudioWatcher] 初始设备:", currentDev:name(), " - ", lastValidDeviceUID)
     end
 end
 
@@ -50,10 +51,10 @@ end
 -- 3. 监听器
 initLastValidDevice()
 hs.audiodevice.watcher.setCallback(function(event)
-    print("[AudioWatcher] 事件:", event)
-    if event == "dev#" then
+    -- print("[AudioWatcher] 事件:", event)
+    -- 音频输入切换事件，4字符，要有空格
+    if event == "dIn " then
         hs.timer.doAfter(CHECK_DELAY, checkAndRestore)
     end
 end)
 hs.audiodevice.watcher.start()
-print("[AudioWatcher] 已启动")
