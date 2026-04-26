@@ -15,6 +15,16 @@ local BLACKLIST = {
     },
 }
 
+local mods_swap = {
+    left = "cmd",
+    right = "opt",
+}
+
+local mods_swap_flipped = {
+    left = "opt",
+    right = "cmd",
+}
+
 -- 检查设备是否在黑名单中
 function M.isBlacklisted(device)
     if device.vendorID then
@@ -49,6 +59,9 @@ function M.startWatcher()
             else
                 print("[CmdOptSwap] 设备在黑名单中，跳过")
             end
+        elseif event == "disconnected" then
+            print("[CmdOptSwap] device disconnected:", device.name or "unknown")
+            M.restoreKeyboardModifiers()
         end
     end)
 
@@ -64,6 +77,12 @@ function M.stopWatcher()
     end
 end
 
+-- 销毁模块，停止所有 watcher
+function M.destroy()
+    M.stopWatcher()
+    print("[CmdOptSwap] 模块已销毁")
+end
+
 -- 交换修饰键
 function M.swapKeyboardModifiers()
     hs.keycodes.masicap(mods_swap)
@@ -73,16 +92,6 @@ end
 function M.restoreKeyboardModifiers()
     hs.keycodes.masicap(mods_swap_flipped)
 end
-
-local mods_swap = {
-    left = "cmd",
-    right = "opt",
-}
-
-local mods_swap_flipped = {
-    left = "opt",
-    right = "cmd",
-}
 
 -- 自动启动
 M.startWatcher()
