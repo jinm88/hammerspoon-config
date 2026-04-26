@@ -41,16 +41,17 @@ function M.isBlacklisted(device)
     return false
 end
 
-local bluetoothWatcher = nil
+local usbWatcher = nil
 
 function M.startWatcher()
-    if bluetoothWatcher then
+    if usbWatcher then
         print("[CmdOptSwap] watcher already running")
         return
     end
 
-    bluetoothWatcher = hs.bluetooth.watcher.new(function(event, device)
-        print("[CmdOptSwap] bluetooth event:", event)
+    -- 使用 USB watcher 监听设备连接
+    usbWatcher = hs.usb.watcher.new(function(event, device)
+        print("[CmdOptSwap] USB event:", event, "device:", device.name or "unknown")
         if event == "connected" then
             print("[CmdOptSwap] device connected:", device.name or "unknown", "vid:", device.vendorID or "n/a")
             if not M.isBlacklisted(device) then
@@ -65,15 +66,15 @@ function M.startWatcher()
         end
     end)
 
-    bluetoothWatcher:start()
-    print("[CmdOptSwap] 蓝牙监听已启动")
+    usbWatcher:start()
+    print("[CmdOptSwap] USB 监听已启动")
 end
 
 function M.stopWatcher()
-    if bluetoothWatcher then
-        bluetoothWatcher:stop()
-        bluetoothWatcher = nil
-        print("[CmdOptSwap] 蓝牙监听已停止")
+    if usbWatcher then
+        usbWatcher:stop()
+        usbWatcher = nil
+        print("[CmdOptSwap] USB 监听已停止")
     end
 end
 
