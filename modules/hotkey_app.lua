@@ -5,18 +5,43 @@
 --]]
 
 -- 导出应用列表供其他模块使用
-local APP_LIST = {
-  { mods = {'lOpt'}, key = 'f1', name = 'Obsidian' },
-  { mods = {'lOpt'}, key = 'f2', name = 'Microsoft To Do', desc = 'To Do' },
-  { mods = {'lOpt'}, key = 'f3', name = 'Google Chrome', desc = 'Chrome' },
-  { mods = {'lOpt'}, key = 'f4', name = 'Telegram' },
-
-  { mods = {'lCmd'}, key = 'f3', name = 'iTerm' },
-  { mods = {'lCmd'}, key = 'f2', name = 'Ghostty' },
-  { mods = {'lCmd'}, key = 'f1', name = 'Antigravity' },
-  { mods = {'lCmd'}, key = 'f4', name = 'TRAE CN' },
-  { mods = {'lCmd'}, key = 'f5', name = 'Visual Studio Code', desc = 'VSCode' },
+-- 分层定义：先按 mods 分组，组内定义 apps 列表
+local APP_GROUPS = {
+  {
+    mods = {'lCmd'},
+    apps = {
+      { key = 'f1', name = 'Obsidian' },
+      { key = 'f2', name = 'Microsoft To Do', desc = 'To Do' },
+      { key = 'f3', name = 'Google Chrome', desc = 'Chrome' },
+      { key = 'f4', name = 'Safari' },
+      { key = 'f5', name = 'Telegram' },
+    },
+  },
+  {
+    mods = {'lOpt'},
+    apps = {
+      { key = 'f1', name = 'Sublime Text' },
+      { key = 'f2', name = 'Ghostty' },
+      { key = 'f3', name = 'iTerm' },
+      { key = 'f4', name = 'TRAE CN' },
+      --{ key = 'f1', name = 'Antigravity' },
+      { key = 'f5', name = 'Visual Studio Code', desc = 'VSCode' },
+    },
+  },
 }
+
+-- 将分层结构展平为扁平列表，确保下游遍历逻辑无需修改
+local APP_LIST = {}
+for _, group in ipairs(APP_GROUPS) do
+  for _, app in ipairs(group.apps) do
+    table.insert(APP_LIST, {
+      mods = group.mods,
+      key = app.key,
+      name = app.name,
+      desc = app.desc,
+    })
+  end
+end
 
 -- 填充缺失的 desc，如果 desc 为空则与 name 相同
 for _, app in ipairs(APP_LIST) do
