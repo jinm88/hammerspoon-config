@@ -8,7 +8,7 @@
 -- 分层定义：先按 mods 分组，组内定义 apps 列表
 local APP_GROUPS = {
   {
-    mods = {'lCmd'},
+    mods = {'lOpt'},
     apps = {
       { key = 'f1', name = 'Obsidian' },
       { key = 'f2', name = 'Microsoft To Do', desc = 'To Do' },
@@ -20,12 +20,12 @@ local APP_GROUPS = {
   {
     mods = {'lOpt'},
     apps = {
-      { key = 'f1', name = 'Sublime Text' },
-      { key = 'f2', name = 'Ghostty' },
-      { key = 'f3', name = 'iTerm' },
-      { key = 'f4', name = 'TRAE CN' },
+      { key = '1', name = 'Sublime Text' },
+      { key = '2', name = 'Ghostty' },
+      { key = '3', name = 'iTerm' },
+      { key = '4', name = 'TRAE CN' },
       --{ key = 'f1', name = 'Antigravity' },
-      { key = 'f5', name = 'Visual Studio Code', desc = 'VSCode' },
+      { key = '5', name = 'Visual Studio Code', desc = 'VSCode' },
     },
   },
 }
