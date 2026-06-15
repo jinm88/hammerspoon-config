@@ -5,27 +5,27 @@
 --]]
 
 -- 导出应用列表供其他模块使用
--- 分层定义：先按 mods 分组，组内定义 apps 列表
+-- 分层定义：先按 mods 分组，组内定义 apps 列表2
 local APP_GROUPS = {
   {
     mods = {'lOpt'},
     apps = {
-      { key = 'f1', name = 'Obsidian' },
-      { key = 'f2', name = 'Microsoft To Do', desc = 'To Do' },
-      { key = 'f3', name = 'Google Chrome', desc = 'Chrome' },
-      { key = 'f4', name = 'Safari' },
-      { key = 'f5', name = 'Telegram' },
+      { key = '1', name = 'Microsoft To Do', desc = 'To Do' },
+      { key = '2', name = 'Obsidian' },
+      { key = '3', name = 'Google Chrome', desc = 'Chrome' },
+      { key = '4', name = 'Safari' },
+      { key = '5', name = 'Telegram' },
     },
   },
   {
-    mods = {'lOpt'},
+    mods = {'lCmd'},
     apps = {
-      { key = '1', name = 'Sublime Text' },
-      { key = '2', name = 'Ghostty' },
-      { key = '3', name = 'iTerm' },
-      { key = '4', name = 'TRAE CN' },
+      { key = 'f1', name = 'Sublime Text' },
+      { key = 'f2', name = 'Ghostty' },
+      { key = 'f3', name = 'iTerm' },
+      { key = 'f4', name = 'TRAE CN' },
       --{ key = 'f1', name = 'Antigravity' },
-      { key = '5', name = 'Visual Studio Code', desc = 'VSCode' },
+      { key = 'f5', name = 'Visual Studio Code', desc = 'VSCode' },
     },
   },
 }
