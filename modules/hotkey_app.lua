@@ -10,11 +10,11 @@ local APP_GROUPS = {
   {
     mods = {'lOpt'},
     apps = {
-      { key = '1', name = 'Microsoft To Do', desc = 'To Do' },
-      { key = '2', name = 'Obsidian' },
-      { key = '3', name = 'Google Chrome', desc = 'Chrome' },
-      { key = '4', name = 'Safari' },
-      { key = '5', name = 'Telegram' },
+      { key = 'f1', name = 'Microsoft To Do', desc = 'To Do' },
+      { key = 'f2', name = 'Obsidian' },
+      { key = 'f3', name = 'Google Chrome', desc = 'Chrome' },
+      { key = 'f4', name = 'Safari' },
+      { key = 'f5', name = 'Telegram' },
     },
   },
   {

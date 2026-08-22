@@ -13,7 +13,7 @@ local Pinyin = WeType
 
 -- 定义你自己想要自动切换输入法的 app
 local APP_TO_IME = {
-  ['终端'] = Pinyin,
+  ['终端'] = ABC,
   ['Ghostty'] = Pinyin,
   ['iTerm2'] = ABC,
   ['Visual Studio Code'] = ABC,

@@ -8,10 +8,21 @@ local KEY_LIST = {
   { mods = {'lOpt'}, key = 's', target = 'down' },
   { mods = {'lOpt'}, key = 'a', target = 'left' },
   { mods = {'lOpt'}, key = 'd', target = 'right' },
-  { mods = {'lOpt'}, key = 'q', target = 'pageup', desc = 'PageUp' },
-  { mods = {'lOpt'}, key = 'e', target = 'pagedown', desc = 'PageDown' },
-  { mods = {'lOpt'}, key = 'r', target = 'home', desc = 'Home' },
-  { mods = {'lOpt'}, key = 'f', target = 'end', desc = 'End' },
+  { mods = {'lOpt'}, key = 'r', target = 'pageup', desc = 'PageUp' },
+  { mods = {'lOpt'}, key = 'f', target = 'pagedown', desc = 'PageDown' },
+  { mods = {'lOpt'}, key = 'q', target = 'home', desc = 'Home' },
+  { mods = {'lOpt'}, key = 'e', target = 'end', desc = 'End' },
+  
+  { mods = {'lOpt'}, key = '[', target = 'pageup', desc = 'PageUp' },
+  { mods = {'lOpt'}, key = ']', target = 'pagedown', desc = 'PageDown' },
+  { mods = {'rOpt'}, key = '[', target = 'pageup', desc = 'PageUp' },
+  { mods = {'rOpt'}, key = ']', target = 'pagedown', desc = 'PageDown' },
+  -- { mods = {'rOpt'}, key = ';', target = 'home', desc = 'Home' },
+  -- { mods = {'rOpt'}, key = '\'', target = 'end', desc = 'End' },
+  { mods = {'rCtrl'}, key = '[', target = 'pageup', desc = 'PageUp' },
+  { mods = {'rCtrl'}, key = ']', target = 'pagedown', desc = 'PageDown' },
+  -- { mods = {'rCtrl'}, key = ';', target = 'home', desc = 'Home' },
+  -- { mods = {'rCtrl'}, key = '\'', target = 'end', desc = 'End' },
 }
 
 -- 导出配置

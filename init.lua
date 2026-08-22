@@ -1,6 +1,10 @@
 -- 关闭 hs.hotkey 的日志输出
 hs.hotkey.setLogLevel('warning')
 
+-- 只需要引入 ipc 模块，Hammerspoon 就会自动开启内部默认的命令行监听端口
+require("hs.ipc")
+
+
 -- 配置定位服务权限，获取wifi需要用到
 -- print(hs.location.get())
 -- require('modules.caffeine')
