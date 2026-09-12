@@ -24,7 +24,35 @@ local IME_TO_COLORS = {
   }
 }
 -- --------------------------------------------------
+-- 键盘在线状态检测
+-- --------------------------------------------------
+-- 键盘离线时底部指示器显示的颜色（橙）
+local NO_KEYBOARD_COLOR = { hex = '#FF8C00' }
+-- 键盘在线状态轮询间隔（秒）
+local KEYBOARD_POLL_INTERVAL = 3
+-- 键盘是否在线（系统枚举到任意键盘类 HID 设备即在线，不区分连接来源）
+local keyboardOnline = true
 
+-- 前置声明，供下方 pollKeyboard 引用
+local update
+
+-- 检测当前是否存在键盘类输入设备
+local function hasKeyboard()
+  -- UsagePage=1 (Generic Desktop), Usage=6 (Keyboard)
+  local output = hs.execute('hidutil list --matching \'{"DeviceUsagePage":1,"DeviceUsage":6}\'')
+  return output ~= nil and output:find('%S') ~= nil
+end
+
+-- 键盘在线状态变化时刷新指示器
+local function pollKeyboard()
+  local online = hasKeyboard()
+  if online ~= keyboardOnline then
+    keyboardOnline = online
+    update()
+  end
+end
+
+-- --------------------------------------------------
 local canvases = {}
 local lastSourceID = nil
 local lastScreenID = nil
@@ -83,10 +111,16 @@ local function clear()
 end
 
 -- 更新 canvas 显示
-local function update(sourceID)
+-- 键盘离线时无键盘色优先级最高，无论当前输入法是什么都显示它
+function update(sourceID)
   clear()
 
-  local colors = IME_TO_COLORS[sourceID or hs.keycodes.currentSourceID()]
+  local colors
+  if not keyboardOnline then
+    colors = { NO_KEYBOARD_COLOR }
+  else
+    colors = IME_TO_COLORS[sourceID or hs.keycodes.currentSourceID()]
+  end
 
   if colors then
     draw(colors)
@@ -116,11 +150,17 @@ imi_dn = hs.distributednotifications.new(
 -- 每秒同步一次，避免由于错过事件监听导致状态不同步
 -- imi_indicatorSyncTimer = hs.timer.new(1, handleInputSourceChanged)
 -- 屏幕变化时候重新渲染
-imi_screenWatcher = hs.screen.watcher.new(update)
+-- screen.watcher 回调会把 watcher 对象传给 update，需要包一层避免被当作 sourceID
+imi_screenWatcher = hs.screen.watcher.new(function() update() end)
 
 imi_dn:start()
 -- imi_indicatorSyncTimer:start()
 imi_screenWatcher:start()
 
--- 初始执行一次
+-- 键盘在线状态轮询
+imi_keyboardTimer = hs.timer.doEvery(KEYBOARD_POLL_INTERVAL, pollKeyboard)
+imi_keyboardTimer:start()
+
+-- 初始执行一次（先同步一次键盘在线状态）
+keyboardOnline = hasKeyboard()
 update()
