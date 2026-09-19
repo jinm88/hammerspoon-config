@@ -15,10 +15,12 @@ require('modules.hotkey_app')
 require('modules.hotkey_arrow_keys')
 require('modules.auto_switch_audio')
 require('modules.fix_paste_blocking')
-require('modules.input_method')
 require('modules.fix_smooth_scrolling')
 require('modules.feat_peek_app')
 require('modules.feat_wifi_status')
+require('modules.input_method_indicator')
+require('modules.fix_cursor_leak')
+require('modules.fix_halfwidth_punct')
 
 -- 显示所有快捷键映射
 local function showAllHotkeys()
@@ -60,3 +62,40 @@ end
 
 -- 绑定显示所有快捷键的快捷键
 hs.hotkey.bind({'cmd', 'alt', 'ctrl'}, '/', showAllHotkeys)
+
+-- --------------------------------------------------
+-- Spoons（由 SpoonInstall 统一管理，缺失的 Spoon 会从官方仓库自动下载安装）
+-- --------------------------------------------------
+hs.loadSpoon('SpoonInstall')
+spoon.SpoonInstall.use_syncinstall = true
+local Install = spoon.SpoonInstall
+
+-- 输入法名称（InputSourceSwitch 用名称而非 sourceID）
+-- 本机输入法名称可在 Hammerspoon Console 执行 hs.inspect(hs.keycodes.methods()) 查看
+local WeType = '微信输入法'
+
+-- 根据 App 自动切换输入法
+Install:andUse('InputSourceSwitch', {
+  fn = function(app)
+    app:setApplications({
+      ['终端'] = 'ABC',
+      ['Ghostty'] = WeType,
+      ['iTerm2'] = 'ABC',
+      ['Visual Studio Code'] = 'ABC',
+      ['Sublime Text'] = 'ABC',
+      ['CotEditor'] = 'ABC',
+      ['WebStorm'] = 'ABC',
+      ['Obsidian'] = WeType,
+      ['WeChat'] = WeType,
+      ['Telegram'] = WeType,
+    })
+    app:start()
+  end
+})
+
+-- 划词翻译
+Install:andUse('PopupTranslateSelection', {
+  hotkeys = {
+    translate = { {'alt', 'shift'}, 'e' },
+  }
+})

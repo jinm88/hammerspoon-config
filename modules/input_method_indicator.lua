@@ -1,22 +1,20 @@
 -- **************************************************
--- 输入法管理：根据 App 自动切换输入法 + 输入法指示器
+-- 输入法指示器（激活窗口左侧竖条）
+-- 规则：英文（ABC）灰色；微信输入法绿色；简体中文输入法红色；
+--       键盘离线时优先显示橙色提醒
 -- **************************************************
 
-local utils = require('modules.utils')
-
--- --------------------------------------------------
--- 输入法定义
 -- --------------------------------------------------
 local ABC = 'com.apple.keylayout.ABC'
 local ApplePinyin = 'com.apple.inputmethod.SCIM.ITABC'
 local WeType = 'com.tencent.inputmethod.wetype.pinyin'
--- defaults read ~/Library/Preferences/com.apple.HIToolbox.plist AppleSelectedInputSources
-local Pinyin = WeType
 
 -- 指示器颜色（按输入法 Source ID 配置）
 local IME_TO_COLORS = {
   -- 系统默认英语
-  [ABC] = {},
+  [ABC] = {
+    { hex = '#808080' }, -- 灰
+  },
   -- 系统自带简中输入法
   [ApplePinyin] = {
     { hex = '#B22222' }, -- 红
@@ -25,59 +23,21 @@ local IME_TO_COLORS = {
     { hex = '#228B22' }, -- 绿
   }
 }
-
--- 定义你自己想要自动切换输入法的 app
-local APP_TO_IME = {
-  ['终端'] = ABC,
-  ['Ghostty'] = Pinyin,
-  ['iTerm2'] = ABC,
-  ['Visual Studio Code'] = ABC,
-  ['Sublime Text'] = ABC,
-  ['CotEditor'] = ABC,
-  ['WebStorm'] = ABC,
-  ['Obsidian'] = Pinyin,
-  ['WeChat'] = Pinyin,
-  ['Telegram'] = Pinyin,
-}
 -- --------------------------------------------------
 
 -- --------------------------------------------------
 -- 指示器外观配置
 -- --------------------------------------------------
--- 指示器高度
-local HEIGHT = 4
+-- 指示器长度
+local LENGTH = 120
+-- 指示器粗细
+local THICKNESS = 4
 -- 指示器透明度
 local ALPHA = 0.6
--- 底部边距
-local MARGIN_BOTTOM = 3
+-- 左边距（无激活窗口回退到屏幕时使用）
+local MARGIN_LEFT = 3
 -- 多个颜色之间线性渐变
 local ALLOW_LINEAR_GRADIENT = false
--- --------------------------------------------------
-
--- --------------------------------------------------
--- 根据 App 自动切换输入法
--- --------------------------------------------------
-local function updateFocusedAppInputMethod(appObject)
-  local focusedAppName = appObject:name()
-  local ime = APP_TO_IME[focusedAppName]
-
-  if ime then
-    hs.keycodes.currentSourceID(ime)
-  end
-end
-local debouncedUpdateFn = utils.debounce(updateFocusedAppInputMethod, 0.1)
-
-imi_appWatcher = hs.application.watcher.new(
-  function(appName, eventType, appObject)
-    if eventType == hs.application.watcher.activated then
-      debouncedUpdateFn(appObject)
-    end
-  end
-)
-imi_appWatcher:start()
-
--- --------------------------------------------------
--- 输入法指示器
 -- --------------------------------------------------
 -- 键盘在线状态检测
 -- --------------------------------------------------
@@ -108,19 +68,70 @@ local function pollKeyboard()
 end
 
 -- --------------------------------------------------
+-- 窗口切换时在窗口中心短暂显示输入法指示
+-- --------------------------------------------------
+-- 闪现持续时长（秒）
+local FLASH_DURATION = 0.8
+-- 延迟闪现（秒）：等 InputSourceSwitch 的 debounce 完成，避免闪出旧输入法颜色
+local FLASH_DELAY = 0.15
+local flashCanvas = nil
+local flashHideTimer = nil
+
+local function flashCenter()
+  local window = hs.window.focusedWindow()
+  if not window then return end
+  local frame = window:frame()
+
+  local colors
+  if not keyboardOnline then
+    colors = { NO_KEYBOARD_COLOR }
+  else
+    colors = IME_TO_COLORS[hs.keycodes.currentSourceID()]
+  end
+  if not colors or #colors == 0 then return end
+
+  if flashCanvas then flashCanvas:delete() end
+  local size = 10
+  flashCanvas = hs.canvas.new({
+    x = frame.x + (frame.w - size) / 2,
+    y = frame.y + frame.h * 2 / 3 - size / 2,
+    w = size,
+    h = size,
+  })
+  flashCanvas:level(hs.canvas.windowLevels.overlay)
+  flashCanvas:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces)
+  flashCanvas:alpha(ALPHA)
+  flashCanvas[1] = {
+    type = 'circle',
+    action = 'fill',
+    fillColor = colors[1],
+    frame = { x = 0, y = 0, w = size, h = size },
+  }
+  flashCanvas:show()
+
+  if flashHideTimer then flashHideTimer:stop() end
+  flashHideTimer = hs.timer.doAfter(FLASH_DURATION, function()
+    if flashCanvas then
+      flashCanvas:delete()
+      flashCanvas = nil
+    end
+  end)
+end
+
+-- --------------------------------------------------
 local canvases = {}
 local lastSourceID = nil
 local lastScreenID = nil
 
--- 绘制指示器
+-- 绘制指示器（锚定到当前激活窗口；无激活窗口时回退到鼠标所在屏幕）
 local function draw(colors)
-  local screen = hs.mouse.getCurrentScreen()
-  local frame = screen:fullFrame()
+  local window = hs.window.focusedWindow()
+  local frame = window and window:frame() or hs.mouse.getCurrentScreen():fullFrame()
 
-  local canvasW = 120
-  local canvasX = frame.x + (frame.w - canvasW) / 2
-  local canvasY = frame.y + frame.h - HEIGHT - MARGIN_BOTTOM
-  local canvasH = HEIGHT
+  local canvasW = THICKNESS
+  local canvasX = window and frame.x or frame.x + MARGIN_LEFT
+  local canvasY = frame.y + (frame.h - LENGTH) / 2
+  local canvasH = LENGTH
 
   local canvas = hs.canvas.new({ x = canvasX, y = canvasY, w = canvasW, h = canvasH })
   canvas:level(hs.canvas.windowLevels.overlay)
@@ -137,17 +148,17 @@ local function draw(colors)
     }
     canvas[1] = rect
   else
-    local cellW = canvasW / #colors
+    local cellH = canvasH / #colors
 
     for j, color in ipairs(colors) do
-      local startX = (j - 1) * cellW
-      local startY = 0
+      local startX = 0
+      local startY = (j - 1) * cellH
       local rect = {
         type = 'rectangle',
         action = 'fill',
-        roundedRectRadii = { xRadius = canvasH / 2, yRadius = canvasH / 2 },
+        roundedRectRadii = { xRadius = canvasW / 2, yRadius = canvasW / 2 },
         fillColor = color,
-        frame = { x = startX, y = startY, w = cellW, h = canvasH }
+        frame = { x = startX, y = startY, w = canvasW, h = cellH }
       }
       canvas[j] = rect
     end
@@ -202,15 +213,23 @@ imi_dn = hs.distributednotifications.new(
   -- or 'AppleSelectedInputSourcesChangedNotification'
   'com.apple.Carbon.TISNotifySelectedKeyboardInputSourceChanged'
 )
--- 每秒同步一次，避免由于错过事件监听导致状态不同步
--- imi_indicatorSyncTimer = hs.timer.new(1, handleInputSourceChanged)
 -- 屏幕变化时候重新渲染
 -- screen.watcher 回调会把 watcher 对象传给 update，需要包一层避免被当作 sourceID
 imi_screenWatcher = hs.screen.watcher.new(function() update() end)
 
 imi_dn:start()
--- imi_indicatorSyncTimer:start()
 imi_screenWatcher:start()
+
+-- 窗口焦点切换时在窗口中心闪现输入法指示；拖动时跟随重绘（指示器锚定在激活窗口上）
+imi_windowFilter = hs.window.filter.new()
+  :subscribe(
+    hs.window.filter.windowFocused,
+    function() hs.timer.doAfter(FLASH_DELAY, flashCenter) end
+  )
+  :subscribe(
+    hs.window.filter.windowMoved,
+    function() update() end
+  )
 
 -- 键盘在线状态轮询
 imi_keyboardTimer = hs.timer.doEvery(KEYBOARD_POLL_INTERVAL, pollKeyboard)
