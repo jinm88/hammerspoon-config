@@ -1,7 +1,48 @@
 -- **************************************************
--- 输入法指示器
+-- 输入法管理：根据 App 自动切换输入法 + 输入法指示器
 -- **************************************************
 
+local utils = require('modules.utils')
+
+-- --------------------------------------------------
+-- 输入法定义
+-- --------------------------------------------------
+local ABC = 'com.apple.keylayout.ABC'
+local ApplePinyin = 'com.apple.inputmethod.SCIM.ITABC'
+local WeType = 'com.tencent.inputmethod.wetype.pinyin'
+-- defaults read ~/Library/Preferences/com.apple.HIToolbox.plist AppleSelectedInputSources
+local Pinyin = WeType
+
+-- 指示器颜色（按输入法 Source ID 配置）
+local IME_TO_COLORS = {
+  -- 系统默认英语
+  [ABC] = {},
+  -- 系统自带简中输入法
+  [ApplePinyin] = {
+    { hex = '#B22222' }, -- 红
+  },
+  [WeType] = {
+    { hex = '#228B22' }, -- 绿
+  }
+}
+
+-- 定义你自己想要自动切换输入法的 app
+local APP_TO_IME = {
+  ['终端'] = ABC,
+  ['Ghostty'] = Pinyin,
+  ['iTerm2'] = ABC,
+  ['Visual Studio Code'] = ABC,
+  ['Sublime Text'] = ABC,
+  ['CotEditor'] = ABC,
+  ['WebStorm'] = ABC,
+  ['Obsidian'] = Pinyin,
+  ['WeChat'] = Pinyin,
+  ['Telegram'] = Pinyin,
+}
+-- --------------------------------------------------
+
+-- --------------------------------------------------
+-- 指示器外观配置
 -- --------------------------------------------------
 -- 指示器高度
 local HEIGHT = 4
@@ -11,18 +52,32 @@ local ALPHA = 0.6
 local MARGIN_BOTTOM = 3
 -- 多个颜色之间线性渐变
 local ALLOW_LINEAR_GRADIENT = false
--- 指示器颜色
-local IME_TO_COLORS = {
-  -- 系统默认英语
-  ['com.apple.keylayout.ABC'] = {},
-  -- 系统自带简中输入法
-  ['com.apple.inputmethod.SCIM.ITABC'] = {
-    { hex = '#B22222' }, -- 红
-  },
-  ['com.tencent.inputmethod.wetype.pinyin'] = {
-    { hex = '#228B22' }, -- 绿
-  }
-}
+-- --------------------------------------------------
+
+-- --------------------------------------------------
+-- 根据 App 自动切换输入法
+-- --------------------------------------------------
+local function updateFocusedAppInputMethod(appObject)
+  local focusedAppName = appObject:name()
+  local ime = APP_TO_IME[focusedAppName]
+
+  if ime then
+    hs.keycodes.currentSourceID(ime)
+  end
+end
+local debouncedUpdateFn = utils.debounce(updateFocusedAppInputMethod, 0.1)
+
+imi_appWatcher = hs.application.watcher.new(
+  function(appName, eventType, appObject)
+    if eventType == hs.application.watcher.activated then
+      debouncedUpdateFn(appObject)
+    end
+  end
+)
+imi_appWatcher:start()
+
+-- --------------------------------------------------
+-- 输入法指示器
 -- --------------------------------------------------
 -- 键盘在线状态检测
 -- --------------------------------------------------
