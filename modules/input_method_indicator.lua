@@ -1,5 +1,5 @@
 -- **************************************************
--- 输入法指示器（焦点窗口所在屏幕底部横条）
+-- 输入法指示器（焦点窗口所在屏幕左侧竖条）
 -- 规则：英文（ABC）灰色；微信输入法绿色；简体中文输入法红色；
 --       键盘离线时优先显示橙色提醒
 -- **************************************************
@@ -13,14 +13,14 @@ local WeType = 'com.tencent.inputmethod.wetype.pinyin'
 local IME_TO_COLORS = {
   -- 系统默认英语
   [ABC] = {
-    { hex = '#B0B0B0' }, -- 亮灰
+    { hex = '#6B6B6B' }, -- 深灰（浅色背景下不糊）
   },
   -- 系统自带简中输入法
   [ApplePinyin] = {
-    { hex = '#FF5252' }, -- 亮红
+    { hex = '#C62828' }, -- 深红
   },
   [WeType] = {
-    { hex = '#00C853' }, -- 亮绿
+    { hex = '#008A3E' }, -- 深绿
   }
 }
 -- --------------------------------------------------
@@ -28,17 +28,17 @@ local IME_TO_COLORS = {
 -- --------------------------------------------------
 -- 指示器外观配置
 -- --------------------------------------------------
--- 指示器长度（水平方向）
+-- 指示器长度（垂直方向）
 local LENGTH = 120
--- 指示器粗细（垂直方向）
+-- 指示器粗细（水平方向）
 local THICKNESS = 6
 -- 闪烁次数与间隔（秒）：切换窗口时竖条亮灭提示
 local FLASH_BLINKS = 2
 local FLASH_INTERVAL = 0.15
 -- 指示器透明度
-local ALPHA = 0.85
--- 距底部边缘的间距
-local MARGIN_BOTTOM = 3
+local ALPHA = 1
+-- 左边距（相对焦点窗口所在屏幕左边缘）
+local MARGIN_LEFT = 3
 -- 多个颜色之间线性渐变
 local ALLOW_LINEAR_GRADIENT = false
 -- 调试日志开关：复现「切换窗口不闪烁」时打开，到 Hammerspoon 控制台看事件顺序
@@ -50,8 +50,8 @@ local function debugLog(...)
 end
 -- 键盘在线状态检测
 -- --------------------------------------------------
--- 键盘离线时底部指示器显示的颜色（橙）
-local NO_KEYBOARD_COLOR = { hex = '#FF8C00' }
+-- 键盘离线时指示器显示的颜色（橙）
+local NO_KEYBOARD_COLOR = { hex = '#B85C00' }
 -- 窗口移动/调整大小后，静置多久才重绘指示条（秒）
 local MOVE_SETTLE_DELAY = 0.3
 -- 键盘在线状态轮询间隔（秒）
@@ -83,16 +83,16 @@ local canvases = {}
 local barBlinkTimer = nil
 local lastSourceID = nil
 
--- 绘制指示器（锚定到焦点窗口所在屏幕底部，水平居中；无焦点窗口时回退到鼠标所在屏幕）
+-- 绘制指示器（锚定到焦点窗口所在屏幕左边缘，垂直居中；无焦点窗口时回退到鼠标所在屏幕）
 local function draw(colors)
   local window = hs.window.focusedWindow()
   local screen = (window and window:screen()) or hs.mouse.getCurrentScreen()
   local frame = screen:fullFrame()
 
-  local canvasW = LENGTH
-  local canvasX = frame.x + (frame.w - LENGTH) / 2
-  local canvasY = frame.y + frame.h - THICKNESS - MARGIN_BOTTOM
-  local canvasH = THICKNESS
+  local canvasW = THICKNESS
+  local canvasX = frame.x + MARGIN_LEFT
+  local canvasY = frame.y + (frame.h - LENGTH) / 2
+  local canvasH = LENGTH
 
   local canvas = hs.canvas.new({ x = canvasX, y = canvasY, w = canvasW, h = canvasH })
   canvas:level(hs.canvas.windowLevels.overlay)
@@ -109,17 +109,17 @@ local function draw(colors)
     }
     canvas[1] = rect
   else
-    local cellW = canvasW / #colors
+    local cellH = canvasH / #colors
 
     for j, color in ipairs(colors) do
-      local startX = (j - 1) * cellW
-      local startY = 0
+      local startX = 0
+      local startY = (j - 1) * cellH
       local rect = {
         type = 'rectangle',
         action = 'fill',
-        roundedRectRadii = { xRadius = canvasH / 2, yRadius = canvasH / 2 },
+        roundedRectRadii = { xRadius = canvasW / 2, yRadius = canvasW / 2 },
         fillColor = color,
-        frame = { x = startX, y = startY, w = cellW, h = canvasH }
+        frame = { x = startX, y = startY, w = canvasW, h = cellH }
       }
       canvas[j] = rect
     end
