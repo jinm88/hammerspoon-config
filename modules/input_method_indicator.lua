@@ -31,7 +31,10 @@ local IME_TO_COLORS = {
 -- 指示器长度
 local LENGTH = 120
 -- 指示器粗细
-local THICKNESS = 4
+local THICKNESS = 6
+-- 闪烁次数与间隔（秒）：切换窗口时竖条亮灭提示
+local FLASH_BLINKS = 2
+local FLASH_INTERVAL = 0.15
 -- 指示器透明度
 local ALPHA = 0.6
 -- 左边距（无激活窗口回退到屏幕时使用）
@@ -68,58 +71,8 @@ local function pollKeyboard()
 end
 
 -- --------------------------------------------------
--- 窗口切换时在窗口中心短暂显示输入法指示
--- --------------------------------------------------
--- 闪现持续时长（秒）
-local FLASH_DURATION = 0.8
--- 延迟闪现（秒）：等 InputSourceSwitch 的 debounce 完成，避免闪出旧输入法颜色
-local FLASH_DELAY = 0.15
-local flashCanvas = nil
-local flashHideTimer = nil
-
-local function flashCenter()
-  local window = hs.window.focusedWindow()
-  if not window then return end
-  local frame = window:frame()
-
-  local colors
-  if not keyboardOnline then
-    colors = { NO_KEYBOARD_COLOR }
-  else
-    colors = IME_TO_COLORS[hs.keycodes.currentSourceID()]
-  end
-  if not colors or #colors == 0 then return end
-
-  if flashCanvas then flashCanvas:delete() end
-  local size = 10
-  flashCanvas = hs.canvas.new({
-    x = frame.x + (frame.w - size) / 2,
-    y = frame.y + frame.h * 2 / 3 - size / 2,
-    w = size,
-    h = size,
-  })
-  flashCanvas:level(hs.canvas.windowLevels.overlay)
-  flashCanvas:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces)
-  flashCanvas:alpha(ALPHA)
-  flashCanvas[1] = {
-    type = 'circle',
-    action = 'fill',
-    fillColor = colors[1],
-    frame = { x = 0, y = 0, w = size, h = size },
-  }
-  flashCanvas:show()
-
-  if flashHideTimer then flashHideTimer:stop() end
-  flashHideTimer = hs.timer.doAfter(FLASH_DURATION, function()
-    if flashCanvas then
-      flashCanvas:delete()
-      flashCanvas = nil
-    end
-  end)
-end
-
--- --------------------------------------------------
 local canvases = {}
+local barBlinkTimer = nil
 local lastSourceID = nil
 local lastScreenID = nil
 
@@ -193,16 +146,45 @@ function update(sourceID)
   end
 end
 
+-- 竖条闪烁：先隐藏再显示，亮灭交替后恢复常亮（输入法变化时提示）
+local function blinkBar()
+  if not canvases[1] then return end
+  if barBlinkTimer then barBlinkTimer:stop() end
+  canvases[1]:hide() -- 立即先隐藏
+  local toggles = 0
+  barBlinkTimer = hs.timer.doEvery(FLASH_INTERVAL, function()
+    if not canvases[1] then
+      barBlinkTimer:stop()
+      return
+    end
+    toggles = toggles + 1
+    if toggles % 2 == 1 then
+      canvases[1]:show()
+    else
+      canvases[1]:hide()
+    end
+    if toggles >= FLASH_BLINKS * 2 - 1 then
+      barBlinkTimer:stop()
+      canvases[1]:show() -- 恢复常亮
+    end
+  end)
+end
+
 local function handleInputSourceChanged()
   local currentSourceID = hs.keycodes.currentSourceID()
   local currentScreen = hs.mouse.getCurrentScreen()
-  local currentScreenID = currentScreen:id()
+  local currentScreenID = currentScreen and currentScreen:id()
 
-  if lastSourceID ~= currentSourceID or lastScreenID ~= currentScreenID then
+  if lastScreenID ~= currentScreenID then
+    -- 屏幕变化：只重绘，不闪烁
     update(currentSourceID)
-    lastSourceID = currentSourceID
-    lastScreenID = currentScreenID
+  elseif lastSourceID ~= currentSourceID then
+    -- 输入法变化：重绘 + 闪烁
+    update(currentSourceID)
+    blinkBar()
   end
+  lastSourceID = currentSourceID
+  lastScreenID = currentScreenID
 end
 
 -- 输入法变化事件监听
@@ -220,11 +202,11 @@ imi_screenWatcher = hs.screen.watcher.new(function() update() end)
 imi_dn:start()
 imi_screenWatcher:start()
 
--- 窗口焦点切换时在窗口中心闪现输入法指示；拖动时跟随重绘（指示器锚定在激活窗口上）
+-- 窗口焦点切换时：只重绘跟随新窗口（不闪烁，闪烁仅响应输入法变化）；拖动时跟随重绘
 imi_windowFilter = hs.window.filter.new()
   :subscribe(
     hs.window.filter.windowFocused,
-    function() hs.timer.doAfter(FLASH_DELAY, flashCenter) end
+    function() update() end
   )
   :subscribe(
     hs.window.filter.windowMoved,
