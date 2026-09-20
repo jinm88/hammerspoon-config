@@ -9,18 +9,18 @@ local ABC = 'com.apple.keylayout.ABC'
 local ApplePinyin = 'com.apple.inputmethod.SCIM.ITABC'
 local WeType = 'com.tencent.inputmethod.wetype.pinyin'
 
--- 指示器颜色（按输入法 Source ID 配置）
+-- 指示器颜色（按输入法 Source ID 配置，选用亮色保证暗背景下可见）
 local IME_TO_COLORS = {
   -- 系统默认英语
   [ABC] = {
-    { hex = '#808080' }, -- 灰
+    { hex = '#B0B0B0' }, -- 亮灰
   },
   -- 系统自带简中输入法
   [ApplePinyin] = {
-    { hex = '#B22222' }, -- 红
+    { hex = '#FF5252' }, -- 亮红
   },
   [WeType] = {
-    { hex = '#228B22' }, -- 绿
+    { hex = '#00C853' }, -- 亮绿
   }
 }
 -- --------------------------------------------------
@@ -36,7 +36,7 @@ local THICKNESS = 6
 local FLASH_BLINKS = 2
 local FLASH_INTERVAL = 0.15
 -- 指示器透明度
-local ALPHA = 0.6
+local ALPHA = 0.85
 -- 左边距（无激活窗口回退到屏幕时使用）
 local MARGIN_LEFT = 3
 -- 多个颜色之间线性渐变
