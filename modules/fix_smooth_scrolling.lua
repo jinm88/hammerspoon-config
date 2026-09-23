@@ -66,5 +66,10 @@ local function handleScrollWheel(event)
   return false
 end
 
-mssf_wheelEvtTap = hs.eventtap.new({ hs.eventtap.event.types.scrollWheel }, handleScrollWheel)
-mssf_wheelEvtTap:start()
+-- 通过 eventtap 健康守护注册（自动处理系统禁用、唤醒后僵尸态、周期重建）
+local health = package.loaded['modules.eventtap_health']
+if health then
+  health.register(function()
+    return hs.eventtap.new({ hs.eventtap.event.types.scrollWheel }, handleScrollWheel):start()
+  end, 'smooth_scroll')
+end

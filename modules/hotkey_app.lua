@@ -13,18 +13,18 @@ local APP_GROUPS = {
       { key = 'f1', name = 'Microsoft To Do', desc = 'To Do' },
       { key = 'f2', name = 'Obsidian' },
       { key = 'f3', name = 'Google Chrome', desc = 'Chrome' },
-      { key = 'f4', name = 'Safari' },
-      { key = 'f5', name = 'Telegram' },
+      { key = 'f4', name = 'Telegram' },
+      { key = 'f5', name = 'Safari' },
     },
   },
   {
     mods = {'lCmd'},
     apps = {
-      { key = 'f1', name = 'Sublime Text' },
+      { key = 'f1', name = 'Hermes' },
       { key = 'f2', name = 'Ghostty' },
       { key = 'f3', name = 'iTerm' },
-      { key = 'f4', name = 'Visual Studio Code', desc = 'VSCode' },
-      { key = 'f5', name = 'TRAE CN' },
+      { key = 'f4', name = 'Sublime Text' },
+      { key = 'f5', name = 'Visual Studio Code', desc = 'VSCode' },
       --{ key = 'f1', name = 'Antigravity' },
     },
   },
@@ -55,57 +55,75 @@ local M = { appList = APP_LIST }
 
 ----------------------------------------------------
 
--- 加载 LeftRightHotkey Spoon，用于区分左右修饰键
-hs.loadSpoon('LeftRightHotkey')
+----------------------------------------------------
+-- 与方向键模块相同的实现：keyDown eventtap 实时读取设备级左右修饰键，
+-- 不依赖 LeftRightHotkey 的「flagsChanged → 动态注册 hs.hotkey」机制，
+-- 避免漏注册和必须 Reload 的完全失效。
 
--- 3. 绑定热键逻辑
--- 使用 ipairs 遍历列表
+local RAW = hs.eventtap.event.rawFlagMasks
+local DEVICE_BITS = {
+  lcmd = RAW.deviceLeftCommand,   rcmd = RAW.deviceRightCommand,
+  lshift = RAW.deviceLeftShift,   rshift = RAW.deviceRightShift,
+  lopt = RAW.deviceLeftAlternate, ropt = RAW.deviceRightAlternate,
+  lctrl = RAW.deviceLeftControl,  rctrl = RAW.deviceRightControl,
+}
+local ALL_DEVICE_MASK = 0
+for _, bit in pairs(DEVICE_BITS) do ALL_DEVICE_MASK = ALL_DEVICE_MASK | bit end
+
+local function modBit(name)
+  local n = name:lower()
+  n = n:gsub('alt$', 'opt'):gsub('option$', 'opt'):gsub('control$', 'ctrl'):gsub('command$', 'cmd')
+  return DEVICE_BITS[n]
+end
+
+-- 动作表：keycode + 精确修饰位掩码 → 动作函数
+local ACTIONS = {}
+local function addAction(mods, key, action)
+  local mask = 0
+  for _, m in ipairs(mods) do mask = mask | assert(modBit(m), '未知修饰键: ' .. m) end
+  table.insert(ACTIONS, { keycode = hs.keycodes.map[key], modmask = mask, action = action })
+end
+
+-- 3. 绑定应用启动热键
 for _, appConfig in ipairs(M.appList) do
-  local mods = appConfig.mods
-  local key = appConfig.key
   local appName = appConfig.name
-
-  -- 定义热键处理函数
-  local launchHandler = function()
-    -- 使用 hs.application.launchOrFocus() 函数：
-    -- 如果应用未运行，则启动它；如果已运行，则切换焦点到该应用。
-    local app = hs.application.launchOrFocus(appName)
-
-    -- 如果应用未找到或启动失败，发出通知
-    if not app then
+  addAction(appConfig.mods, appConfig.key, function()
+    -- 未运行则启动，已运行则切换焦点
+    if not hs.application.launchOrFocus(appName) then
       hs.alert.show('未找到应用或启动失败: ' .. appName)
     end
-  end
-
-  -- 使用 LeftRightHotkey:bind 进行绑定。
-  -- 将启动逻辑放在 pressedFn (按下时执行)，
-  -- 释放和点击函数设置为 nil，以实现最快的响应速度。
-  spoon.LeftRightHotkey:bind(mods, key, launchHandler, nil, nil)
+  end)
 end
 
--- 4. 绑定显示映射的快捷键 (rCtrl + /)
+-- 4. 显示映射的快捷键 (rCtrl + /)
 local function showMappingAlert()
-  local message = ""
-  -- 遍历 APP_LIST 列表并构建通知内容
-  for _, appConfig in ipairs(M.appList) do
-    -- 关键修正：使用 table.concat 将修饰键表连接成字符串，用 " + " 分隔
-    local modsString = table.concat(appConfig.mods, ' + ')
-
-    -- 构建消息格式：mods + key - desc
-    message = message .. string.format("%s + %s - %s\n", modsString, appConfig.key, appConfig.desc)
+  local rows = {}
+  for _, appConfig in ipairs(APP_LIST) do
+    table.insert(rows, string.format('%s + %s - %s',
+      table.concat(appConfig.mods, ' + '), appConfig.key, appConfig.desc))
   end
+  hs.alert.show(table.concat(rows, '\n'))
+end
+addAction({'rCtrl'}, '/', showMappingAlert)
 
-  if #message > 0 then
-    message = message:sub(1, #message - 1)
+local function handleAppHotkey(event)
+  local held = event:getRawEventData().CGEventData.flags & ALL_DEVICE_MASK
+  local keycode = event:getKeyCode()
+  for _, a in ipairs(ACTIONS) do
+    if keycode == a.keycode and held == a.modmask then
+      a.action()
+      return true
+    end
   end
-
-  hs.alert.show(message)
+  return false
 end
 
-local displayKey = '/'
-spoon.LeftRightHotkey:bind({'rCtrl'}, displayKey, showMappingAlert, nil, nil)
-
--- 5. 启动 LeftRightHotkey 监听
-spoon.LeftRightHotkey:start()
+-- 5. 通过 eventtap 健康守护注册
+local health = package.loaded['modules.eventtap_health']
+if health then
+  health.register(function()
+    return hs.eventtap.new({ hs.eventtap.event.types.keyDown }, handleAppHotkey):start()
+  end, 'app_hotkeys')
+end
 
 return M

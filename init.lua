@@ -4,6 +4,9 @@ hs.hotkey.setLogLevel('warning')
 -- 只需要引入 ipc 模块，Hammerspoon 就会自动开启内部默认的命令行监听端口
 require("hs.ipc")
 
+-- eventtap 健康守护：须在各事件监听模块之前加载
+require('modules.eventtap_health')
+
 
 -- 配置定位服务权限，获取wifi需要用到
 -- print(hs.location.get())

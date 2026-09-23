@@ -32,7 +32,7 @@ local CHINESE_SOURCE_IDS = {
 local ENGLISH_SOURCE = 'ABC'
 
 -- 双击判定窗口（秒）：两次按下间隔不超过此值才算双击
-local DOUBLE_TAP_WINDOW = 0.35
+local DOUBLE_TAP_WINDOW = 1
 
 -- 双击触发后动作的延迟（秒）：等第一个字符落定
 local ACTION_DELAY = 0.02
@@ -210,8 +210,13 @@ local function handleKeyDown(event)
   return false
 end
 
-smart_ime_tap = hs.eventtap.new({ hs.eventtap.event.types.keyDown }, handleKeyDown)
-smart_ime_tap:start()
+-- 通过 eventtap 健康守护注册（自动处理系统禁用、唤醒后僵尸态、周期重建）
+local health = package.loaded['modules.eventtap_health']
+if health then
+  health.register(function()
+    return hs.eventtap.new({ hs.eventtap.event.types.keyDown }, handleKeyDown):start()
+  end, 'smart_ime')
+end
 
 -- 焦点切换兜底：临时英文期间离开应用，切回原输入法
 smart_ime_focus_watcher = hs.window.filter.new():subscribe(
