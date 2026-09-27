@@ -21,16 +21,14 @@ local KEY_LIST = {
   { mods = {'lOpt'}, key = 'q', target = 'home', desc = 'Home' },
   { mods = {'lOpt'}, key = 'e', target = 'end', desc = 'End' },
 
-  { mods = {'lOpt'}, key = '[', target = 'pageup', desc = 'PageUp' },
-  { mods = {'lOpt'}, key = ']', target = 'pagedown', desc = 'PageDown' },
-  { mods = {'rOpt'}, key = '[', target = 'pageup', desc = 'PageUp' },
-  { mods = {'rOpt'}, key = ']', target = 'pagedown', desc = 'PageDown' },
+  -- { mods = {'lOpt'}, key = '[', target = 'pageup', desc = 'PageUp' },
+  -- { mods = {'lOpt'}, key = ']', target = 'pagedown', desc = 'PageDown' },
   -- { mods = {'rOpt'}, key = ';', target = 'home', desc = 'Home' },
   -- { mods = {'rOpt'}, key = '\'', target = 'end', desc = 'End' },
   { mods = {'rCtrl'}, key = '[', target = 'pageup', desc = 'PageUp' },
   { mods = {'rCtrl'}, key = ']', target = 'pagedown', desc = 'PageDown' },
-  -- { mods = {'rCtrl'}, key = ';', target = 'home', desc = 'Home' },
-  -- { mods = {'rCtrl'}, key = '\'', target = 'end', desc = 'End' },
+  { mods = {'rCtrl'}, key = '-', target = 'home', desc = 'Home' },
+  { mods = {'rCtrl'}, key = '=', target = 'end', desc = 'End' }
 }
 
 -- 设备级修饰键位（raw flags，可区分左右）
