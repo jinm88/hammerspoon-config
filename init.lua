@@ -24,6 +24,7 @@ require('modules.feat_wifi_status')
 require('modules.input_method_indicator')
 require('modules.fix_cursor_ui_view')
 require('modules.feat_smart_ime')
+require('modules.auto_disconnect_bt_mic')
 
 -- 显示所有快捷键映射
 local function showAllHotkeys()

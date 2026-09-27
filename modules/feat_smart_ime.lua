@@ -1,12 +1,13 @@
 -- ===================================================
--- Ghostty 智能输入法切换：命令输入时自动临时切英文
+-- 智能输入法切换：命令输入时自动临时切英文
 --
--- 场景一：中文输入状态下，双击触发（第二下在窗口期内）：
+-- 场景一（全局，不限应用）：非英文输入法下，双击触发（第二下在窗口期内）：
 --   - 「//」→ 第二个被吞掉，只留一个「/」，切英文
 --   - 「!!」→ 吞掉第二个，退格删掉第一个「！」，切英文后补发一个英文「!」
 --   恢复：Tab / Enter / Esc；立即按 Backspace（还没输入其他字符）也算取消
 --   单个「/」「!」不触发切换（「!」正常输出「！」）
--- 场景二：按 F1 → 临时切到英文，再按任意其他键后切回原输入法
+--   临时英文跨应用保留，直到恢复键结束
+-- 场景二（仅 Ghostty）：按 F1 → 临时切到英文，再按任意其他键后切回原输入法
 --   （触发恢复的那个键先以英文送达，之后才切回）
 --
 -- 原理：eventtap 监听 keyDown；
@@ -14,19 +15,16 @@
 --   - 窗口期内第二个同键被拦截，按各键配置吞掉/删字/补发，并临时切英文
 --     （第二个按键是真实物理事件，切换在它送达前生效，不存在补发丢失问题）
 --   - 临时英文期间记录原输入法，恢复键按下时切回
---   - 焦点切换时兜底切回，避免把英文状态带去其他应用
+--   - F1 触发的在焦点离开 Ghostty 时兜底切回，避免把英文状态带去其他应用
 -- ===================================================
 
--- 需要生效的应用
-local TARGET_APPS = {
+-- F1 场景需要生效的应用（双击「//」「!!」触发不限应用）
+local F1_TARGET_APPS = {
   ['Ghostty'] = true,
 }
 
--- 中文输入法 Source ID（只在这些输入法下触发）
-local CHINESE_SOURCE_IDS = {
-  ['com.tencent.inputmethod.wetype.pinyin'] = true, -- 微信输入法
-  ['com.apple.inputmethod.SCIM.ITABC'] = true,       -- 系统简中拼音
-}
+-- 英文输入法 Source ID：当前是它时不触发双击（任意其他输入法都可触发）
+local ENGLISH_SOURCE_ID = 'com.apple.keylayout.ABC'
 
 -- 临时切到的英文输入法（layout 名，与 InputSourceSwitch 保持一致）
 local ENGLISH_SOURCE = 'ABC'
@@ -38,9 +36,6 @@ local DOUBLE_TAP_WINDOW = 1
 local ACTION_DELAY = 0.02
 -- 切英文后到补发的延迟（秒）：等输入法切换传播到应用
 local RESEND_DELAY = 0.15
-
--- 补发前确认输入法已切到位（layout Source ID）
-local ENGLISH_SOURCE_ID = 'com.apple.keylayout.ABC'
 
 -- 双击触发的按键配置（keycode → 行为）
 --   delete_first：是否退格删掉第一个键产生的字符
@@ -73,13 +68,13 @@ smart_ime_busy = false
 smart_ime_tap = nil
 smart_ime_focus_watcher = nil
 
-local function isChineseSource()
-  return CHINESE_SOURCE_IDS[hs.keycodes.currentSourceID()] ~= nil
+local function isNonEnglishSource()
+  return hs.keycodes.currentSourceID() ~= ENGLISH_SOURCE_ID
 end
 
-local function inTargetApp()
+local function inF1TargetApp()
   local app = hs.application.frontmostApplication()
-  return app ~= nil and TARGET_APPS[app:name()] ~= nil
+  return app ~= nil and F1_TARGET_APPS[app:name()] ~= nil
 end
 
 -- 硬修饰键（不含 shift/fn：shift 是「!」的一部分，F1 自带 fn）
@@ -195,7 +190,8 @@ local function handleKeyDown(event)
     smart_ime_pending = nil
   end
 
-  if not inTargetApp() or not isChineseSource() then return false end
+  -- 双击触发不限应用；非英文输入法即可。F1 仅在目标应用生效
+  if not isNonEnglishSource() then return false end
   if hasHardMods(event) then return false end
 
   local keycode = event:getKeyCode()
@@ -204,7 +200,7 @@ local function handleKeyDown(event)
     -- 第一下：放行（「/」输出「/」、「!」输出「！」），等待窗口期内可能的第二次按下
     smart_ime_pending = { t = hs.timer.absoluteTime(), keycode = keycode, shifted = cfg.shifted }
     return false
-  elseif keycode == F1_KEYCODE then
+  elseif keycode == F1_KEYCODE and inF1TargetApp() then
     toEnglish('f1') -- F1 本身放行，无需补发
   end
   return false
@@ -218,12 +214,13 @@ if health then
   end, 'smart_ime')
 end
 
--- 焦点切换兜底：临时英文期间离开应用，切回原输入法
+-- 焦点切换兜底：F1 触发的临时英文离开 Ghostty 时切回；
+-- 双击触发的临时英文跨应用保留（由 Tab / Enter / Esc 等恢复键结束）
 smart_ime_focus_watcher = hs.window.filter.new():subscribe(
   hs.window.filter.windowFocused,
   function()
     smart_ime_pending = nil
     if smart_ime_busy then return end
-    if smart_ime_state then restore() end
+    if smart_ime_state and smart_ime_state.reason == 'f1' then restore() end
   end
 )
