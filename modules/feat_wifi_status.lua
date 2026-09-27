@@ -1,108 +1,50 @@
--- 创建一个用于显示 Wi-Fi 状态的 Canvas 变量
-local wifiStatusCanvas = nil
+-- WiFi 断联通知（事件驱动，无定时轮询）
 
--- 指示器高度
-local HEIGHT = 4
--- 指示器透明度
-local ALPHA = 1
--- 多个颜色之间线性渐变
-local ALLOW_LINEAR_GRADIENT = false
--- 指示器颜色
-local COLORS = {
-	{ hex = '#de2910' },
-	-- { hex = '#eab308' },
-	-- { hex = '#0ea5e9' }
-}
--- --------------------------------------------------
+-- 上一次连接的 WiFi 名称（用于断网通知中展示）
+local lastWifiName = nil
+-- 是否已针对本次断网弹过通知（防止 watcher 多次回调重复弹窗）
+local disconnectNotified = false
 
-local canvases = {}
-local lastSourceID = nil
-
--- 绘制指示器
-local function draw(colors)
-	local screens = hs.screen.allScreens()
-
-	for i, screen in ipairs(screens) do
-	local frame = screen:fullFrame()
-	local canvasX = frame.x + frame.w - 64
-	local canvasY = frame.y
-	local canvasW = 64
-	local canvasH = HEIGHT
-
-	local canvas = hs.canvas.new({ x = canvasX, y = canvasY, w = canvasW, h = canvasH })
-	canvas:level(hs.canvas.windowLevels.overlay)
-	canvas:behavior(hs.canvas.windowBehaviors.canJoinAllSpaces)
-	canvas:alpha(ALPHA)
-
-	if ALLOW_LINEAR_GRADIENT and #colors > 1 then
-		local rect = {
-			type = 'rectangle',
-			action = 'fill',
-			fillGradient = 'linear',
-			fillGradientColors = colors,
-			frame = { x = 0, y = 0, w = canvasW, h = canvasH }
-		}
-		canvas[1] = rect
-	else
-		local cellW = canvasW / #colors
-
-		for j, color in ipairs(colors) do
-		local startX = (j - 1) * cellW
-		local startY = 0
-		local rect = {
-			type = 'rectangle',
-			action = 'fill',
-			fillColor = color,
-			frame = { x = startX, y = startY, w = cellW, h = canvasH }
-		}
-		canvas[j] = rect
-		end
-	end
-
-	canvas:show()
-	canvases[i] = canvas
-	end
-end
-
--- 清除 canvas 上的内容
-local function clear()
-	for _, canvas in ipairs(canvases) do
-	canvas:delete()
-	end
-	canvases = {}
-end
-
--- 更新 canvas 显示
-local function updateWifiStatus(sourceID)
-	clear()
+-- WiFi 状态变化回调
+local function updateWifiStatus()
 	local wifiName = hs.wifi.currentNetwork()
 	if wifiName == nil then
-		draw(COLORS)
-		hs.alert("[Status] WIFI down")
-	end
-end
-
--- 创建一个 Wi-Fi 观察者来监听状态变化
-local wifiWatcher = hs.wifi.watcher.new(updateWifiStatus)
-
--- 启动观察者
-wifiWatcher:start()
-
--- 每5分钟检查一次 WiFi 状态，如果关闭则打开
-local function checkAndEnableWifi()
-	local interfaces = hs.wifi.interfaces()
-	if interfaces and #interfaces > 0 then
-		local currentNetwork = hs.wifi.currentNetwork()
-		if currentNetwork == nil then
-			-- WiFi 未连接，尝试打开 WiFi
-			hs.wifi.setPower(true, interfaces[1])
-			hs.alert("[Auto] 开启 WiFi")
+		-- 仅在「曾连接过 -> 断开」的状态跳变时通知一次
+		-- 开机时 WiFi 尚未关联（lastWifiName 为 nil）不视为断网，避免误报
+		if lastWifiName and not disconnectNotified then
+			local text = "WiFi 已断开连接（\"" .. lastWifiName .. "\"）"
+			hs.notify.new({ title = "Hammerspoon", informativeText = text }):send()
+			disconnectNotified = true
+		end
+	else
+		-- disconnectNotified 为 true 表示刚从断开状态恢复，此时弹重连通知
+		local wasDisconnected = disconnectNotified
+		lastWifiName = wifiName
+		disconnectNotified = false
+		if wasDisconnected then
+			hs.notify.new({
+				title = "Hammerspoon",
+				informativeText = "WiFi 已连接：" .. wifiName,
+			}):send()
 		end
 	end
 end
 
-local wifiCheckTimer = hs.timer.new(60, checkAndEnableWifi)
-wifiCheckTimer:start()
+-- 必须用全局变量持有 watcher，否则局部引用会被 Lua GC 回收，导致监控失效
+wifi_watcher = hs.wifi.watcher.new(updateWifiStatus)
+wifi_watcher:start()
 
--- 首次加载脚本时，调用一次更新函数来设置初始状态
+-- WiFi 未连接时自动开启（每 60 秒检查一次）
+local function checkAndEnableWifi()
+	local interfaces = hs.wifi.interfaces()
+	if interfaces and #interfaces > 0 and hs.wifi.currentNetwork() == nil then
+		hs.wifi.setPower(true, interfaces[1])
+	end
+end
+
+-- 同样用全局变量持有 timer 防 GC
+wifi_check_timer = hs.timer.new(60, checkAndEnableWifi)
+wifi_check_timer:start()
+
+-- 首次加载脚本时，初始化当前网络状态
 updateWifiStatus()
