@@ -95,16 +95,20 @@ for _, appConfig in ipairs(M.appList) do
   end)
 end
 
--- 4. 显示映射的快捷键 (rCtrl + /)
+-- 4. 显示当前应用信息 + 全部 app 快捷键 (rCtrl + \)
 local function showMappingAlert()
-  local rows = {}
+  local frontApp = hs.application.frontmostApplication()
+  local rows = {
+    string.format('%s\n%s', frontApp:name(), frontApp:bundleID() or '-'),
+    '--- App Hotkeys ---',
+  }
   for _, appConfig in ipairs(APP_LIST) do
     table.insert(rows, string.format('%s + %s - %s',
       table.concat(appConfig.mods, ' + '), appConfig.key, appConfig.desc))
   end
-  hs.alert.show(table.concat(rows, '\n'))
+  hs.alert.show(table.concat(rows, '\n'), { textSize = 18 }, 6)
 end
-addAction({'rCtrl'}, '/', showMappingAlert)
+addAction({'rCtrl'}, '\\', showMappingAlert)
 
 local function handleAppHotkey(event)
   local held = event:getRawEventData().CGEventData.flags & ALL_DEVICE_MASK
