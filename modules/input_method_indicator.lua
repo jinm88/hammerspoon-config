@@ -5,23 +5,21 @@
 -- **************************************************
 
 -- --------------------------------------------------
+local offline = 'offline'
 local ABC = 'com.apple.keylayout.ABC'
 local ApplePinyin = 'com.apple.inputmethod.SCIM.ITABC'
 local WeType = 'com.tencent.inputmethod.wetype.pinyin'
 
 -- 指示器颜色（按输入法 Source ID 配置，选用亮色保证暗背景下可见）
 local IME_TO_COLORS = {
-  -- 系统默认英语
-  [ABC] = {
-    { hex = '#6B6B6B' }, -- 深灰（浅色背景下不糊）
-  },
-  -- 系统自带简中输入法
-  [ApplePinyin] = {
-    { hex = '#C62828' }, -- 深红
-  },
-  [WeType] = {
-    { hex = '#008A3E' }, -- 深绿
-  }
+  -- 键盘离线时指示器显示的颜色（深红）
+  [offline] = {{ hex = '#C62828' }},
+  -- 系统默认英语（深灰）
+  [ABC] = {{ hex = '#6B6B6B' }},
+  -- 系统自带简中输入法（橙）
+  [ApplePinyin] = {{ hex = '#B85C00' }},
+  -- 微信输入法（深绿）
+  [WeType] = {{ hex = '#008A3E' }}
 }
 -- --------------------------------------------------
 
@@ -50,8 +48,6 @@ local function debugLog(...)
 end
 -- 键盘在线状态检测
 -- --------------------------------------------------
--- 键盘离线时指示器显示的颜色（橙）
-local NO_KEYBOARD_COLOR = { hex = '#B85C00' }
 -- 窗口移动/调整大小后，静置多久才重绘指示条（秒）
 local MOVE_SETTLE_DELAY = 0.3
 -- 键盘在线状态轮询间隔（秒）
@@ -144,7 +140,7 @@ function update(sourceID)
 
   local colors
   if not keyboardOnline then
-    colors = { NO_KEYBOARD_COLOR }
+    colors = IME_TO_COLORS[offline]
   else
     colors = IME_TO_COLORS[sourceID or hs.keycodes.currentSourceID()]
   end
