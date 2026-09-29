@@ -23,9 +23,9 @@ local APP_GROUPS = {
       { key = 'f1', name = 'Hermes' },
       { key = 'f2', name = 'Ghostty' },
       { key = 'f3', name = 'iTerm' },
-      { key = 'f4', name = 'Sublime Text' },
+      { key = 'f4', name = 'ZedG' },
       { key = 'f5', name = 'Visual Studio Code', desc = 'VSCode' },
-      --{ key = 'f1', name = 'Antigravity' },
+      { key = 'f6', name = 'CotEditor' },
     },
   },
 }
