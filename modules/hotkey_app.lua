@@ -11,8 +11,8 @@ local APP_GROUPS = {
     mods = {'lOpt'},
     apps = {
       { key = 'f1', name = 'Google Chrome', desc = 'Chrome' },
-      { key = 'f3', name = 'Obsidian' },
-      { key = 'f2', name = 'Microsoft To Do', desc = 'To Do' },
+      { key = 'f2', name = 'Obsidian' },
+      { key = 'f3', name = 'Microsoft To Do', desc = 'To Do' },
       { key = 'f4', name = 'Telegram' },
       { key = 'f5', name = 'Safari' },
     },
