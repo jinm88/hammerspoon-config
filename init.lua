@@ -25,6 +25,7 @@ require('modules.fix_smooth_scrolling')
 -- 曾尝试改为「切换鼠标所在显示器」，但在通用控制场景下无法实现，已删除，详见 docs/decisions/0001-switch-display-under-universal-control.md
 -- require('modules.feat_peek_app')
 require('modules.feat_wifi_status')
+require('modules.feat_auto_proxy')
 require('modules.input_method_indicator')
 require('modules.fix_cursor_ui_view')
 require('modules.feat_smart_ime')

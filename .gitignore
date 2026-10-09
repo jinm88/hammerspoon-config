@@ -1,3 +1,6 @@
 .DS_Store
 Spoons/PopupTranslateSelection.spoon
 Spoons/InputSourceSwitch.spoon
+
+# Compiled privileged helper; build locally and install as root-owned Setuid.
+bin/setproxy
