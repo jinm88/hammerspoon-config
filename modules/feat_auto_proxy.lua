@@ -7,6 +7,9 @@
 --   local  -> 127.0.0.1:7890
 --   remote -> 192.168.31.201:7890
 
+local log = hs.logger.new('autoProxy', 'info')
+
+local NETWORKSETUP_PATH = '/usr/sbin/networksetup'
 local HELPER_PATH = os.getenv('HOME') .. '/.hammerspoon/bin/setproxy'
 local CURL_PATH = '/usr/bin/curl'
 local REMOTE_PROXY_URL = 'http://192.168.31.201:7890'
@@ -38,11 +41,10 @@ local LOCAL_SSIDS = {
 	-- 例如：['某个使用本机代理的 Wi-Fi'] = true,
 }
 
--- 当前由本模块成功应用的代理动作；nil 表示本模块没有持有已开启的代理。
+-- 当前由本模块确认的系统代理动作。
 local currentAction = nil
 local healthCheckInProgress = false
 local proxyFaultCount = 0
-local lastHealthStatus = nil
 
 auto_proxy_health_timer = nil
 
@@ -56,12 +58,26 @@ local function proxyProfileForSSID(ssid)
 	return 'off', '关闭代理'
 end
 
+local function expectedProxyHost(action)
+	if action == 'local' then
+		return '127.0.0.1'
+	end
+	if action == 'remote' then
+		return '192.168.31.201'
+	end
+	return nil
+end
+
+local function trim(value)
+	if value == nil then
+		return ''
+	end
+	return (value:gsub('^%s*(.-)%s*$', '%1'))
+end
+
 local function runProxyHelper(action)
 	if hs.fs.attributes(HELPER_PATH) == nil then
-		hs.notify.new({
-			title = 'Hammerspoon',
-			informativeText = '代理 helper 不存在：' .. HELPER_PATH,
-		}):send()
+		log.ef('代理 helper 不存在：%s', HELPER_PATH)
 		return false
 	end
 
@@ -72,25 +88,19 @@ local function runProxyHelper(action)
 		completed = true
 		succeeded = exitCode == 0
 		if not succeeded then
-			local message = stdErr
-			if message == nil or message == '' then
-				message = stdOut
+			local message = trim(stdErr)
+			if message == '' then
+				message = trim(stdOut)
 			end
-			if message == nil or message == '' then
+			if message == '' then
 				message = 'exit code ' .. tostring(exitCode)
 			end
-			hs.notify.new({
-				title = 'Hammerspoon 代理切换失败',
-				informativeText = message,
-			}):send()
+			log.ef('代理切换失败：%s', message)
 		end
 	end, { action })
 
 	if task == nil or not task:start() then
-		hs.notify.new({
-			title = 'Hammerspoon',
-			informativeText = '无法启动代理 helper',
-		}):send()
+		log.e('无法启动代理 helper')
 		return false
 	end
 
@@ -115,11 +125,74 @@ local function scheduleHealthCheck(delay)
 	end)
 end
 
-local function trim(value)
-	if value == nil then
-		return ''
+local function parseProxyState(output)
+	local enabled = output:match('Enabled:%s*(%a+)')
+	local server = trim(output:match('Server:%s*([^\n]*)'))
+	local port = tonumber(output:match('Port:%s*(%d+)'))
+
+	return {
+		enabled = enabled ~= nil and enabled:lower() == 'yes',
+		server = server,
+		port = port,
+	}
+end
+
+local function readProxyState(callback)
+	local state = {}
+	local remaining = 3
+
+	local checks = {
+		{ key = 'web', args = { '-getwebproxy', 'Wi-Fi' } },
+		{ key = 'secure', args = { '-getsecurewebproxy', 'Wi-Fi' } },
+		{ key = 'socks', args = { '-getsocksfirewallproxy', 'Wi-Fi' } },
+	}
+
+	for _, check in ipairs(checks) do
+		local task = hs.task.new(NETWORKSETUP_PATH, function(exitCode, stdOut, stdErr)
+			if exitCode == 0 then
+				state[check.key] = parseProxyState(stdOut)
+			else
+				log.ef('读取代理状态失败 %s：%s', check.key, trim(stdErr))
+			end
+
+			remaining = remaining - 1
+			if remaining == 0 then
+				callback(state)
+			end
+		end, check.args)
+
+		if task == nil or not task:start() then
+			log.ef('无法启动 networksetup：%s', table.concat(check.args, ' '))
+			remaining = remaining - 1
+			if remaining == 0 then
+				callback(state)
+			end
+		end
 	end
-	return (value:gsub('^%s*(.-)%s*$', '%1'))
+end
+
+local function proxyStateMatches(state, action)
+	if state.web == nil or state.secure == nil or state.socks == nil then
+		return false
+	end
+
+	if action == 'off' then
+		return not state.web.enabled
+			and not state.secure.enabled
+			and not state.socks.enabled
+	end
+
+	local host = expectedProxyHost(action)
+	return host ~= nil
+		and state.web.enabled
+		and state.secure.enabled
+		and state.socks.enabled
+		and state.web.server == host
+		and state.secure.server == host
+		and state.socks.server == host
+		and state.web.port == 7890
+		and state.secure.port == 7890
+		and state.socks.port == 7890
 end
 
 -- 使用 curl 显式走 remote 代理。只要收到 HTTP 状态码，就证明代理有响应。
@@ -140,7 +213,17 @@ local function curlProbe(url, resultCallback)
 		-- 407、502、503、504 等也说明代理进程有 HTTP 响应；
 		-- 只有 000 / curl 失败才表示连接拒绝、超时或代理无响应。
 		local ok = httpCode ~= nil and httpCode >= 100 and httpCode < 600
-		resultCallback(ok, httpCode or trim(stdErr))
+		local detail
+		if ok then
+			detail = 'HTTP ' .. tostring(httpCode)
+		else
+			detail = trim(stdErr)
+			if detail == '' then
+				detail = 'HTTP ' .. tostring(httpCode or '000')
+			end
+		end
+
+		resultCallback(ok, detail)
 	end, args)
 
 	if task == nil or not task:start() then
@@ -148,73 +231,58 @@ local function curlProbe(url, resultCallback)
 	end
 end
 
-local function checkUrlGroup(urls, groupCallback)
+local function checkUrlGroup(name, urls, groupCallback)
 	local remaining = #urls
 	local anySucceeded = false
+	local results = {}
 
 	for _, url in ipairs(urls) do
-		curlProbe(url, function(ok)
+		curlProbe(url, function(ok, detail)
 			if ok then
 				anySucceeded = true
 			end
 
+			results[#results + 1] = url .. ' => ' .. detail
+				.. (ok and ' [OK]' or ' [FAIL]')
+
 			remaining = remaining - 1
 			if remaining == 0 then
-				groupCallback(anySucceeded)
+				groupCallback(anySucceeded, name .. ': ' .. table.concat(results, '; '))
 			end
 		end)
 	end
 end
 
-local function notifyHealthStatus(status, domesticOK, foreignOK)
-	if status == lastHealthStatus then
-		return
-	end
-	lastHealthStatus = status
-
-	local text
-	if status == 'healthy' then
-		text = 'remote 代理有响应'
-	elseif status == 'proxy_fault' then
-		text = 'remote 代理无响应；将快速复查'
-	else
-		return
-	end
-
-	hs.notify.new({
-		title = 'Hammerspoon 代理检测',
-		informativeText = text .. '（国内=' .. tostring(domesticOK)
-			.. '，国外=' .. tostring(foreignOK) .. '）',
-	}):send()
-end
-
-local function finishHealthCheck(domesticOK, foreignOK)
+local function finishHealthCheck(domesticOK, domesticDetail, foreignOK, foreignDetail)
 	healthCheckInProgress = false
 
 	-- 任一组通过代理得到响应，都说明代理活着；国内组可通时绝不关闭。
 	if domesticOK or foreignOK then
 		proxyFaultCount = 0
-		notifyHealthStatus('healthy', domesticOK, foreignOK)
+		log.i('remote 代理有响应；' .. domesticDetail .. '；' .. foreignDetail)
 		scheduleHealthCheck(HEALTH_NORMAL_INTERVAL)
 		return
 	end
 
 	proxyFaultCount = proxyFaultCount + 1
-	notifyHealthStatus('proxy_fault', domesticOK, foreignOK)
+	log.wf('remote 代理整体无响应（%d/%d）；%s；%s',
+		proxyFaultCount, HEALTH_PROXY_FAULT_LIMIT, domesticDetail, foreignDetail)
 
-	if proxyFaultCount >= HEALTH_PROXY_FAULT_LIMIT then
-		proxyFaultCount = 0
-		if runProxyHelper('off') then
-			stopHealthCheck()
-			currentAction = 'off'
-			lastHealthStatus = 'disabled'
-			hs.notify.new({
-				title = 'Hammerspoon',
-				informativeText = '国内、国外检测均无响应，已自动关闭系统代理',
-			}):send()
-		else
-			scheduleHealthCheck(HEALTH_FAST_INTERVAL)
-		end
+	if proxyFaultCount < HEALTH_PROXY_FAULT_LIMIT then
+		scheduleHealthCheck(HEALTH_FAST_INTERVAL)
+		return
+	end
+
+	proxyFaultCount = 0
+	log.i('连续整体无响应，准备关闭系统代理')
+
+	if runProxyHelper('off') then
+		stopHealthCheck()
+		currentAction = 'off'
+		hs.notify.new({
+			title = 'Hammerspoon',
+			informativeText = '国内、国外检测均无响应，已自动关闭系统代理',
+		}):send()
 	else
 		scheduleHealthCheck(HEALTH_FAST_INTERVAL)
 	end
@@ -237,44 +305,69 @@ checkProxyHealth = function()
 	end
 
 	healthCheckInProgress = true
-
 	local domesticOK = false
 	local foreignOK = false
+	local domesticResult = ''
+	local foreignResult = ''
 	local remaining = 2
 
-	checkUrlGroup(DOMESTIC_URLS, function(ok)
+	checkUrlGroup('国内组', DOMESTIC_URLS, function(ok, detail)
 		domesticOK = ok
+		domesticResult = detail
 		remaining = remaining - 1
 		if remaining == 0 then
-			finishHealthCheck(domesticOK, foreignOK)
+			finishHealthCheck(domesticOK, domesticResult, foreignOK, foreignResult)
 		end
 	end)
 
-	checkUrlGroup(FOREIGN_URLS, function(ok)
+	checkUrlGroup('国外组', FOREIGN_URLS, function(ok, detail)
 		foreignOK = ok
+		foreignResult = detail
 		remaining = remaining - 1
 		if remaining == 0 then
-			finishHealthCheck(domesticOK, foreignOK)
+			finishHealthCheck(domesticOK, domesticResult, foreignOK, foreignResult)
 		end
 	end)
 end
 
 local function updateProxy(ssid)
 	local action, profileName = proxyProfileForSSID(ssid)
-	local message
-	if ssid == nil then
-		message = 'Wi-Fi 已断开，系统代理已关闭'
-	else
-		message = 'Wi-Fi：' .. ssid .. '，' .. profileName
-	end
 
-	proxyFaultCount = 0
-	healthCheckInProgress = false
-	lastHealthStatus = nil
+	readProxyState(function(state)
+		if proxyStateMatches(state, action) then
+			currentAction = action
+			log.i('当前系统代理已是目标状态（' .. action .. '），无需修改')
 
-	if runProxyHelper(action) then
+			if action == 'remote' then
+				scheduleHealthCheck(HEALTH_NORMAL_INTERVAL)
+			else
+				stopHealthCheck()
+			end
+			return
+		end
+
+		log.i('准备修改系统代理：' .. action)
+		if not runProxyHelper(action) then
+			return
+		end
+
 		currentAction = action
-		hs.alert.show(message)
+		proxyFaultCount = 0
+		healthCheckInProgress = false
+
+		local informativeText
+		if ssid == nil then
+			informativeText = 'Wi-Fi 已断开，系统代理已关闭'
+		elseif action == 'off' then
+			informativeText = '已离开 ' .. ssid .. '，系统代理已关闭'
+		else
+			informativeText = '已连接 ' .. ssid .. '，已切换为' .. profileName
+		end
+
+		hs.notify.new({
+			title = 'Hammerspoon',
+			informativeText = informativeText,
+		}):send()
 
 		if action == 'remote' then
 			-- 正常状态下每 5 分钟检测一次；失败后自动切换为快速检测。
@@ -282,7 +375,7 @@ local function updateProxy(ssid)
 		else
 			stopHealthCheck()
 		end
-	end
+	end)
 end
 
 local lastSSID = hs.wifi.currentNetwork()
