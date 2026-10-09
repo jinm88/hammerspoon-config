@@ -6,6 +6,8 @@
 
 -- 导出应用列表供其他模块使用
 -- 分层定义：先按 mods 分组，组内定义 apps 列表2
+local keyboardProfile = require('modules.keyboard_profile')
+
 local APP_GROUPS = {
   {
     mods = {'lOpt'},
@@ -95,11 +97,11 @@ for _, appConfig in ipairs(M.appList) do
   end)
 end
 
--- 4. 显示当前应用信息 + 全部 app 快捷键 (rCtrl + \)
+-- 4. 显示当前应用信息 + 全部 app 快捷键（右侧修饰键随当前键盘变化）
 local function showMappingAlert()
   local frontApp = hs.application.frontmostApplication()
   local rows = {
-    string.format('%s\n%s', frontApp:name(), frontApp:bundleID() or '-'),
+    string.format('%s | %s', frontApp:name(), frontApp:bundleID() or '-'),
     '--- App Hotkeys ---',
   }
   for _, appConfig in ipairs(APP_LIST) do
@@ -108,11 +110,16 @@ local function showMappingAlert()
   end
   hs.alert.show(table.concat(rows, '\n'), { textSize = 18 }, 6)
 end
-addAction({'rCtrl'}, '\\', showMappingAlert)
-
 local function handleAppHotkey(event)
   local held = event:getRawEventData().CGEventData.flags & ALL_DEVICE_MASK
   local keycode = event:getKeyCode()
+
+  -- 显示映射的右侧修饰键跟随当前键盘变化，无需重建 eventtap
+  if keycode == hs.keycodes.map['\\'] and held == assert(modBit(keyboardProfile.rightModifier)) then
+    showMappingAlert()
+    return true
+  end
+
   for _, a in ipairs(ACTIONS) do
     if keycode == a.keycode and held == a.modmask then
       a.action()

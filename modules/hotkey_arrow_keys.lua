@@ -8,10 +8,16 @@
 -- opt+r = Meta+r = readline revert-line，会把命令行删掉的内容
 -- 整段恢复，表现为「输出一段字符」）。
 -- 这里在每次 keyDown 时直接读取设备级左右修饰键状态，无注册竞态。
+--
+-- 键盘连接状态变化时，由 keyboard_profile 自动切换右侧修饰键：
+-- - Mac 内置键盘：rOpt
+-- - 其他外接键盘：rCtrl
 -- **************************************************
 
--- 应用列表格式 (类似 app_hotkey)
-local KEY_LIST = {
+local keyboardProfile = require('modules.keyboard_profile')
+
+-- 不随键盘类型变化的基础绑定
+local BASE_KEY_LIST = {
   { mods = {'lOpt'}, key = 'w', target = 'up' },
   { mods = {'lOpt'}, key = 's', target = 'down' },
   { mods = {'lOpt'}, key = 'a', target = 'left' },
@@ -20,16 +26,32 @@ local KEY_LIST = {
   { mods = {'lOpt'}, key = 'f', target = 'pagedown', desc = 'PageDown' },
   { mods = {'lOpt'}, key = 'q', target = 'home', desc = 'Home' },
   { mods = {'lOpt'}, key = 'e', target = 'end', desc = 'End' },
-
-  -- { mods = {'lOpt'}, key = '[', target = 'pageup', desc = 'PageUp' },
-  -- { mods = {'lOpt'}, key = ']', target = 'pagedown', desc = 'PageDown' },
-  -- { mods = {'rOpt'}, key = ';', target = 'home', desc = 'Home' },
-  -- { mods = {'rOpt'}, key = '\'', target = 'end', desc = 'End' },
-  { mods = {'rCtrl'}, key = '[', target = 'pageup', desc = 'PageUp' },
-  { mods = {'rCtrl'}, key = ']', target = 'pagedown', desc = 'PageDown' },
-  { mods = {'rCtrl'}, key = '-', target = 'home', desc = 'Home' },
-  { mods = {'rCtrl'}, key = '=', target = 'end', desc = 'End' }
 }
+
+-- 当前生效绑定；键盘类型变化时整体替换该表
+local KEY_LIST = {}
+
+local function copyBaseBindings()
+  local list = {}
+  for _, cfg in ipairs(BASE_KEY_LIST) do
+    table.insert(list, {
+      mods = cfg.mods,
+      key = cfg.key,
+      target = cfg.target,
+      desc = cfg.desc,
+    })
+  end
+  return list
+end
+
+local function addKeyBinding(list, mods, key, target, desc)
+  table.insert(list, {
+    mods = mods,
+    key = key,
+    target = target,
+    desc = desc,
+  })
+end
 
 -- 设备级修饰键位（raw flags，可区分左右）
 local RAW = hs.eventtap.event.rawFlagMasks
@@ -46,7 +68,7 @@ local DEVICE_BITS = {
 local ALL_DEVICE_MASK = 0
 for _, bit in pairs(DEVICE_BITS) do ALL_DEVICE_MASK = ALL_DEVICE_MASK | bit end
 
--- 归一化配置里的修饰键名，并预计算每条绑定所需的精确修饰位掩码
+-- 归一化配置里的修饰键名
 -- （与 LeftRightHotkey 语义一致：按下的设备侧修饰键必须与定义完全相同）
 local function modBit(name)
   local n = name:lower()
@@ -54,19 +76,49 @@ local function modBit(name)
   return DEVICE_BITS[n]
 end
 
-for _, cfg in ipairs(KEY_LIST) do
-  local mask = 0
-  for _, m in ipairs(cfg.mods) do
-    local bit = assert(modBit(m), '未知修饰键: ' .. m)
-    mask = mask | bit
+local function rebuildKeyList()
+  local list = copyBaseBindings()
+
+  if keyboardProfile.isNativeMacKeyboard then
+    -- Mac 内置键盘：保留原有的 lOpt [/] 翻页，rOpt -/= 到行首行尾
+    addKeyBinding(list, {'lOpt'}, '[', 'pageup', 'PageUp')
+    addKeyBinding(list, {'lOpt'}, ']', 'pagedown', 'PageDown')
+    addKeyBinding(list, {'rOpt'}, '-', 'home', 'Home')
+    addKeyBinding(list, {'rOpt'}, '=', 'end', 'End')
+  else
+    -- 一般外接键盘
+    addKeyBinding(list, {'rCtrl'}, '[', 'pageup', 'PageUp')
+    addKeyBinding(list, {'rCtrl'}, ']', 'pagedown', 'PageDown')
+    addKeyBinding(list, {'rCtrl'}, '-', 'home', 'Home')
+    addKeyBinding(list, {'rCtrl'}, '=', 'end', 'End')
   end
-  cfg._modmask = mask
-  cfg._keycode = hs.keycodes.map[cfg.key]
-  cfg._target = hs.keycodes.map[cfg.target]
+
+  -- 预计算每条绑定所需的精确修饰位掩码、keycode
+  for _, cfg in ipairs(list) do
+    local mask = 0
+    for _, m in ipairs(cfg.mods) do
+      local bit = assert(modBit(m), '未知修饰键: ' .. m)
+      mask = mask | bit
+    end
+    cfg._modmask = mask
+    cfg._keycode = hs.keycodes.map[cfg.key]
+    cfg._target = hs.keycodes.map[cfg.target]
+  end
+
+  KEY_LIST = list
 end
 
+rebuildKeyList()
+
+-- 键盘切换后替换绑定表；已有 keyDown eventtap 会实时读取新的 KEY_LIST
+keyboardProfile.subscribe(rebuildKeyList)
+
 -- 导出配置
-local M = { keyList = KEY_LIST }
+local M = {}
+
+function M.getKeyList()
+  return KEY_LIST
+end
 ----------------------------------------------------
 
 local function handleKeyDown(event)
@@ -93,6 +145,10 @@ if health then
   health.register(function()
     return hs.eventtap.new({ hs.eventtap.event.types.keyDown }, handleKeyDown):start()
   end, 'arrow_keys')
+end
+
+function M.refresh()
+  rebuildKeyList()
 end
 
 return M

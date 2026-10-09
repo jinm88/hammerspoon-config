@@ -157,7 +157,7 @@ local function createSyncer(cfg)
 		state.syncing = true
 		-- callback 签名：(exitCode, stdOut, stdErr)
 		hs.task
-			.new("/bin/bash", handleResult, nil, {
+			.new("/bin/bash", handleResult, {
 				"-c", SYNC_SCRIPT, "git_sync", state.dir, tostring(state.quietSeconds),
 			})
 			:start()

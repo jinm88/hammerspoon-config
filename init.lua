@@ -7,6 +7,8 @@ require("hs.ipc")
 -- eventtap 健康守护：须在各事件监听模块之前加载
 require('modules.eventtap_health')
 
+-- 初始化时判断当前键盘，热键模块据此选择右侧修饰键
+require('modules.keyboard_profile')
 
 -- 配置定位服务权限，获取wifi需要用到
 -- print(hs.location.get())
@@ -19,7 +21,9 @@ require('modules.hotkey_arrow_keys')
 require('modules.auto_switch_audio')
 require('modules.fix_paste_blocking')
 require('modules.fix_smooth_scrolling')
-require('modules.feat_peek_app')
+-- opt+tab 原用于隐藏/恢复当前 App（已关闭）；
+-- 曾尝试改为「切换鼠标所在显示器」，但在通用控制场景下无法实现，已删除，详见 docs/decisions/0001-switch-display-under-universal-control.md
+-- require('modules.feat_peek_app')
 require('modules.feat_wifi_status')
 require('modules.input_method_indicator')
 require('modules.fix_cursor_ui_view')
