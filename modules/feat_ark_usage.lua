@@ -176,8 +176,9 @@ end
 local function columnOne(p)
   local remain = p.resetEpoch and formatRemaining(p.resetEpoch - os.time()) or '--'
   local pct = math.floor(p.percent + 0.5) .. '%'
+  -- 标签左对齐；百分比、倒计时均右对齐
   return padEnd(PERIOD_LABELS[p.label] or p.label, COL_LABEL) .. '   '
-    .. padStart(pct, COL_PCT) .. '   ' .. padEnd(remain, COL_REMAIN)
+    .. padStart(pct, COL_PCT) .. '   ' .. padStart(remain, COL_REMAIN)
 end
 
 -- 第二栏：总量（紧凑格式）
