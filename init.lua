@@ -32,6 +32,7 @@ require('modules.fix_cursor_ui_view')
 require('modules.feat_smart_ime')
 require('modules.auto_disconnect_bt_mic')
 require('modules.sync_git')
+require('modules.feat_command_palette')
 
 -- --------------------------------------------------
 -- Spoons（由 SpoonInstall 统一管理，缺失的 Spoon 会从官方仓库自动下载安装）
