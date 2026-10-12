@@ -1,11 +1,10 @@
 -- 方舟（arkcli）大模型订阅用量状态栏图标
 --
 -- 每分钟异步调用 `arkcli usage plan`：
---   状态栏纯文本显示 5 小时窗口用量百分比与距重置倒计时，如「32% · 1h54m」
---   下拉菜单三栏（Menlo 等宽对齐）：
---     第一栏：各周期使用百分比（整数）与多久后重置
---     第二栏：各周期总量与套餐档位
---     第三栏：刷新（位于 5h 行）
+--   状态栏纯文本显示 5 小时窗口距重置倒计时与用量百分比，如「4h·1%」
+--   下拉菜单（Menlo 等宽对齐），每行依次为：
+--     距重置倒计时、使用百分比（整数）、已用/总量（紧凑格式）、周期名
+--   菜单末尾附套餐档位与刷新
 -- 也支持多订阅（personal + team）时按周期聚合显示。
 
 local log = hs.logger.new('arkusage', 'warning')
@@ -69,9 +68,11 @@ local function formatNumber(n)
 end
 
 -- 紧凑数字：10,000 -> 10K，1,500 -> 1.5K，2,000,000 -> 2M
-local function formatCompact(n)
+-- roundUp=true 时缩放后向上取整，不保留小数：1,500 -> 2K，12,300 -> 13K
+local function formatCompact(n, roundUp)
   if n == nil then return '?' end
   local function trim(v)
+    if roundUp then return tostring(math.ceil(v)) end
     return (math.floor(v) == v) and tostring(math.floor(v)) or string.format('%.1f', v)
   end
   local abs = math.abs(n)
@@ -112,6 +113,20 @@ local function formatRemaining(sec)
     return string.format('%dh%02dm', h, totalMin % 60)
   end
   return string.format('%dd%02dh', math.floor(h / 24), h % 24)
+end
+
+-- 周/月长周期倒计时：粒度到天，满 1 天只显示天数（12d），不足 1 天才显示小时（23h05m）
+local function formatRemainingDays(sec)
+  if sec < 0 then return '--' end
+  local totalMin = math.floor(sec / 60)
+  local h = math.floor(totalMin / 60)
+  if h < 24 then
+    if totalMin < 60 then
+      return string.format('%dm', totalMin)
+    end
+    return string.format('%dh%02dm', h, totalMin % 60)
+  end
+  return string.format('%dd', math.floor(h / 24))
 end
 
 -- 从所有订阅条目中收集周期数据；同一 label 出现多次（如个人版 + 团队版）时用量相加
@@ -157,8 +172,8 @@ end
 
 -- 菜单统一字体；不指定 color，文字跟随系统菜单的正常颜色（自动适配深浅色模式）
 local MENU_FONT = { name = 'Menlo', size = 13 }
--- 列宽（显示宽度）
-local COL_LABEL, COL_PCT, COL_REMAIN, COL_TOTAL = 5, 4, 6, 5
+-- 列宽（显示宽度）：周期名 / 剩余时间 / 百分比 / 已用-总量
+local COL_LABEL, COL_REMAIN, COL_PCT, COL_USED = 5, 6, 4, 11
 
 local function updateMenubar()
   local p = primaryPeriod()
@@ -166,24 +181,26 @@ local function updateMenubar()
     menubar:setTitle(loading and '··' or '—')
     return
   end
-  -- 状态栏：百分比 + 短倒计时（36%·1h，不足 1 小时显示分钟）
-  local pct = math.floor(p.percent + 0.5)
+  -- 状态栏：短倒计时 + 百分比（4h·1%，不足 1 小时倒计时显示分钟）；百分比向上取整
+  local pct = math.ceil(p.percent)
   local remain = p.resetEpoch and formatRemainingShort(p.resetEpoch - os.time())
-  menubar:setTitle(remain and string.format('%d%%·%s', pct, remain) or pct .. '%')
+  menubar:setTitle(remain and string.format('%s·%d%%', remain, pct) or pct .. '%')
 end
 
--- 第一栏：周期名 + 整数百分比 + 倒计时
+-- 第一栏：倒计时 + 整数百分比
 local function columnOne(p)
-  local remain = p.resetEpoch and formatRemaining(p.resetEpoch - os.time()) or '--'
-  local pct = math.floor(p.percent + 0.5) .. '%'
-  -- 标签左对齐；百分比、倒计时均右对齐
-  return padEnd(PERIOD_LABELS[p.label] or p.label, COL_LABEL) .. '   '
-    .. padStart(pct, COL_PCT) .. '   ' .. padStart(remain, COL_REMAIN)
+  -- 周/月只展示到天，5h/日保留时分精度
+  local fmt = (p.label == 'weekly' or p.label == 'monthly') and formatRemainingDays or formatRemaining
+  local remain = p.resetEpoch and fmt(p.resetEpoch - os.time()) or '--'
+  local pct = math.ceil(p.percent) .. '%'
+  -- 倒计时、百分比均右对齐
+  return padStart(remain, COL_REMAIN) .. '   ' .. padStart(pct, COL_PCT)
 end
 
--- 第二栏：总量（紧凑格式）
+-- 第二栏：已用/总量（紧凑格式，已用向上取整，如 13K/100K）+ 周期名
 local function columnTwo(p)
-  return padStart(formatCompact(p.total), COL_TOTAL)
+  return padStart(formatCompact(p.used, true) .. '/' .. formatCompact(p.total), COL_USED)
+    .. '   ' .. padEnd(PERIOD_LABELS[p.label] or p.label, COL_LABEL)
 end
 
 local function buildMenu()
