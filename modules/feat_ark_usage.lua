@@ -1,11 +1,19 @@
 -- 方舟（arkcli）大模型订阅用量状态栏图标
 --
--- 每分钟异步调用 `arkcli usage plan`：
---   状态栏纯文本显示 5 小时窗口距重置倒计时与用量百分比，如「4h·1%」
---   下拉菜单（Menlo 等宽对齐），每行依次为：
---     距重置倒计时、使用百分比（整数）、已用/总量（紧凑格式）、周期名
---   菜单末尾附套餐档位与刷新
--- 也支持多订阅（personal + team）时按周期聚合显示。
+-- 每分钟异步调用 `arkcli usage plan`。该接口一次返回多个产品的订阅
+-- （items[]：agent-plan / coding-plan，各产品又可能有 personal / team 版），
+-- 不同产品的周期结构不同：
+--   agent-plan ：5h / weekly / monthly，带 used/total/reset_at
+--   coding-plan：session / weekly / monthly，多数周期只给 percent
+-- 因此菜单按「产品」分组展示；同一产品若有多个订阅（personal+team），
+-- 数值型用量相加、重置时间取最早，百分比型取最大值。
+--
+-- 状态栏默认显示 agent-plan（其主周期为滚动 5h 窗口）；点击菜单中任意 plan 标题行
+-- 即可切换状态栏显示哪个 plan（选择持久化到 hs.settings），周期固定取该 plan 的
+-- 主周期（agent-plan=5h，coding-plan=session）。当前 plan 在标题行末尾以 ✓ 标记。
+--
+-- 菜单行（Menlo 等宽对齐）每行依次为：倒计时（5h/session 显示 时:分，周/月显示
+-- 剩余天数如 12d）、整数百分比、已用/总量（紧凑格式）、周期名。
 
 local log = hs.logger.new('arkusage', 'warning')
 
@@ -17,18 +25,27 @@ local ARKCLI = hs.fs.pathToAbsolute('~/.npm-global/bin/arkcli') or '/Users/jin/.
 local NODE_BIN = hs.fs.pathToAbsolute('~/.local/bin') or '/Users/jin/.local/bin'
 local TASK_ENV = { PATH = NODE_BIN .. ':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin', HOME = os.getenv('HOME') }
 
+-- 产品展示名
+local PRODUCT_NAMES = {
+  ['agent-plan'] = 'Agent Plan',
+  ['coding-plan'] = 'Coding Plan',
+  ['agent-plan-team'] = 'Agent Plan (Team)',
+  ['coding-plan-team'] = 'Coding Plan (Team)',
+}
+
 -- 周期展示名：全部用 ASCII，配合 Menlo 等宽字体做列对齐
 -- （中文宽字符在等宽字体下不是整数倍 ASCII 宽，无法用空格精确对齐）
 local PERIOD_LABELS = {
+  ['session'] = 'Sess',
   ['5h'] = '5h',
   weekly = 'Week',
   monthly = 'Month',
   daily = 'Day',
 }
 
--- 菜单行顺序；第一行即状态栏主显示周期（第三栏刷新挂在这一行）
-local PERIOD_ORDER = { '5h', 'daily', 'weekly', 'monthly' }
-local PRIMARY_LABEL = '5h'
+-- 菜单行顺序；状态栏默认显示的 plan 见 PRIMARY_PRODUCT，其主周期见 PRIMARY_LABELS
+local PERIOD_ORDER = { 'session', '5h', 'daily', 'weekly', 'monthly' }
+local PRIMARY_PRODUCT = 'agent-plan'
 
 -- 本机本地时区相对 UTC 的偏移秒数（东八区为 +28800），用于正确解析带偏移的 ISO 时间
 do
@@ -36,11 +53,17 @@ do
   LOCAL_UTC_OFFSET = os.difftime(now, os.time(os.date('!*t', now)))
 end
 
+local SETTINGS_KEY = 'arkUsagePlan' -- hs.settings 中保存选中 plan product id 的键名
+
 local menubar = hs.menubar.new()
-local lastData = nil    -- 最近一次解析成功的 items（含 periods）
+local lastData = nil    -- 最近一次解析成功的「产品分组」数组
 local lastUpdated = nil -- 最近一次成功更新的 epoch
 local loading = false
 local refresh -- 前向声明，供菜单回调引用
+
+-- 用户选定的状态栏 plan（product id，如 coding-plan）；nil 表示默认（agent-plan）
+local currentProduct = hs.settings.get(SETTINGS_KEY)
+if type(currentProduct) ~= 'string' then currentProduct = nil end
 
 -- 右侧补空格到长度 width（仅用于 ASCII 文本）
 local function padEnd(s, width)
@@ -85,7 +108,7 @@ end
 local function isoToEpoch(iso)
   if not iso then return nil end
   local y, mo, d, h, mi, s, zsign, zh, zm =
-    iso:match('(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)([+-])(%d+):?(%d?)')
+    iso:match('(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)([+-])(%d+):?(%d*)')
   if not y then return nil end
   local t = os.time({ year = y + 0, month = mo + 0, day = d + 0, hour = h + 0, min = mi + 0, sec = s + 0 })
   local zOff = (zh + 0) * 3600 + (zm + 0) * 60
@@ -101,18 +124,10 @@ local function formatRemainingShort(sec)
   return string.format('%dh', math.floor(totalMin / 60))
 end
 
--- 秒数转紧凑倒计时：2h05m / 43m / 3d12h；过期返回 '--'
-local function formatRemaining(sec)
+-- 滚动窗口（5h/session）倒计时：时:分（如 4:39）；过期返回 '--'
+local function formatRemainingHM(sec)
   if sec < 0 then return '--' end
-  local totalMin = math.floor(sec / 60)
-  if totalMin < 60 then
-    return string.format('%dm', totalMin)
-  end
-  local h = math.floor(totalMin / 60)
-  if h < 24 then
-    return string.format('%dh%02dm', h, totalMin % 60)
-  end
-  return string.format('%dd%02dh', math.floor(h / 24), h % 24)
+  return string.format('%d:%02d', math.floor(sec / 3600), math.floor((sec % 3600) / 60))
 end
 
 -- 周/月长周期倒计时：粒度到天，满 1 天只显示天数（12d），不足 1 天才显示小时（23h05m）
@@ -129,45 +144,121 @@ local function formatRemainingDays(sec)
   return string.format('%dd', math.floor(h / 24))
 end
 
--- 从所有订阅条目中收集周期数据；同一 label 出现多次（如个人版 + 团队版）时用量相加
-local function collectPeriods(items)
-  local byLabel = {}
+-- 把接口 items[] 按产品聚合成分组数组：
+--   { product, name, tiers={...}, periods={ label, used, total, percent, resetEpoch, numeric } }
+-- 同一产品的多个订阅（personal/team）：
+--   数值型 used/total 相加、重置时间取最早；只有 percent 的周期取百分比最大值。
+local function groupItems(items)
+  local groups = {}
+  local order = {}
   for _, item in ipairs(items or {}) do
-    for _, p in ipairs(item.periods or {}) do
-      local agg = byLabel[p.label]
-      if not agg then
-        agg = { label = p.label, used = 0, total = 0, resetEpoch = nil, tiers = {} }
-        byLabel[p.label] = agg
+    if item.subscribed then
+      local product = item.product or 'unknown'
+      local g = groups[product]
+      if not g then
+        g = { product = product, name = PRODUCT_NAMES[product] or product, tiers = {}, byLabel = {} }
+        groups[product] = g
+        table.insert(order, g)
       end
-      agg.used = agg.used + (p.used or 0)
-      agg.total = agg.total + (p.total or 0)
-      local tier = table.concat({ item.edition, item.tier }, ' ')
-      if tier ~= ' ' and not hs.fnutils.contains(agg.tiers, tier) then
-        table.insert(agg.tiers, tier)
+      -- 档位描述：coding-plan 无 tier 字段，只写 edition；team 产品自身已含 team 语义
+      local tier = item.tier and table.concat({ item.edition, item.tier }, ' ') or (item.edition or '')
+      if tier ~= '' and not hs.fnutils.contains(g.tiers, tier) then
+        table.insert(g.tiers, tier)
       end
-      -- 多订阅时取最早的重置时间
-      local resetEpoch = isoToEpoch(p.reset_at)
-      if resetEpoch and (not agg.resetEpoch or resetEpoch < agg.resetEpoch) then
-        agg.resetEpoch = resetEpoch
+      for _, p in ipairs(item.periods or {}) do
+        local agg = g.byLabel[p.label]
+        if not agg then
+          agg = {
+            label = p.label, used = 0, total = 0, hasNumbers = false,
+            percentOnly = nil, resetEpoch = nil,
+          }
+          g.byLabel[p.label] = agg
+        end
+        if type(p.used) == 'number' or type(p.total) == 'number' then
+          agg.hasNumbers = true
+          agg.used = agg.used + (p.used or 0)
+          agg.total = agg.total + (p.total or 0)
+        elseif type(p.percent) == 'number' then
+          -- 只有百分比的周期（如 coding-plan session/weekly/monthly）
+          if not agg.percentOnly or p.percent > agg.percentOnly then
+            agg.percentOnly = p.percent
+          end
+        end
+        local resetEpoch = isoToEpoch(p.reset_at)
+        if resetEpoch and (not agg.resetEpoch or resetEpoch < agg.resetEpoch) then
+          agg.resetEpoch = resetEpoch
+        end
       end
     end
   end
-  local periods = {}
-  for _, label in ipairs(PERIOD_ORDER) do
-    if byLabel[label] then
-      local p = byLabel[label]
-      p.percent = p.total > 0 and (p.used / p.total * 100) or 0
-      table.insert(periods, p)
+
+  for _, g in ipairs(order) do
+    g.periods = {}
+    for _, label in ipairs(PERIOD_ORDER) do
+      local agg = g.byLabel[label]
+      if agg then
+        if agg.hasNumbers and agg.total > 0 then
+          agg.percent = agg.used / agg.total * 100
+        else
+          agg.percent = agg.percentOnly or 0
+        end
+        agg.numeric = agg.hasNumbers and agg.total > 0
+        table.insert(g.periods, agg)
+      end
     end
   end
-  return periods
+  return order
+end
+
+-- 各 plan 在状态栏中展示的主周期（取该 plan 在 PERIOD_ORDER 中最靠前的可用周期）；
+-- agent-plan 主周期为滚动 5h 窗口，coding-plan 为 session
+local PRIMARY_LABELS = {
+  ['agent-plan'] = '5h',
+  ['coding-plan'] = 'session',
+  ['agent-plan-team'] = '5h',
+  ['coding-plan-team'] = 'session',
+}
+
+-- 在分组中查找指定产品
+local function findGroup(product)
+  for _, g in ipairs(lastData or {}) do
+    if g.product == product then return g end
+  end
+end
+
+-- 取一个 plan 的状态栏主周期：优先 PRIMARY_LABELS 配置，否则取第一个可用周期
+local function primaryOf(g)
+  if not g or #g.periods == 0 then return nil end
+  local preferred = PRIMARY_LABELS[g.product]
+  if preferred then
+    for _, p in ipairs(g.periods) do
+      if p.label == preferred then return p end
+    end
+  end
+  return g.periods[1]
+end
+
+-- 状态栏当前 plan/周期：用户选择的 plan > 默认（agent-plan）> 第一个 plan；
+-- 返回所属分组 g 与周期 p（g 用于菜单打勾）
+local function resolvePrimary()
+  if not lastData then return nil end
+  local g, p
+  if currentProduct then g = findGroup(currentProduct) end
+  if g then p = primaryOf(g) end
+  if not p then
+    g = findGroup(PRIMARY_PRODUCT)
+    p = primaryOf(g)
+  end
+  if not p and lastData[1] then
+    g = lastData[1]
+    p = primaryOf(g)
+  end
+  return g, p
 end
 
 local function primaryPeriod()
-  if not lastData then return nil end
-  for _, p in ipairs(collectPeriods(lastData)) do
-    if p.label == PRIMARY_LABEL then return p end
-  end
+  local _, p = resolvePrimary()
+  return p
 end
 
 -- 菜单统一字体；不指定 color，文字跟随系统菜单的正常颜色（自动适配深浅色模式）
@@ -189,18 +280,19 @@ end
 
 -- 第一栏：倒计时 + 整数百分比
 local function columnOne(p)
-  -- 周/月只展示到天，5h/日保留时分精度
-  local fmt = (p.label == 'weekly' or p.label == 'monthly') and formatRemainingDays or formatRemaining
+  -- 周/月显示剩余天数（粒度到天），5h/session 显示 时:分
+  local fmt = (p.label == 'weekly' or p.label == 'monthly') and formatRemainingDays or formatRemainingHM
   local remain = p.resetEpoch and fmt(p.resetEpoch - os.time()) or '--'
   local pct = math.ceil(p.percent) .. '%'
   -- 倒计时、百分比均右对齐
   return padStart(remain, COL_REMAIN) .. '   ' .. padStart(pct, COL_PCT)
 end
 
--- 第二栏：已用/总量（紧凑格式，已用向上取整，如 13K/100K）+ 周期名
+-- 第二栏：数值型周期显示 已用/总量（紧凑格式，已用向上取整，如 13K/100K）+ 周期名；
+-- 百分比型周期没有用量数值，该列留空以保持周期名列对齐
 local function columnTwo(p)
-  return padStart(formatCompact(p.used, true) .. '/' .. formatCompact(p.total), COL_USED)
-    .. '   ' .. padEnd(PERIOD_LABELS[p.label] or p.label, COL_LABEL)
+  local usedCol = p.numeric and (formatCompact(p.used, true) .. '/' .. formatCompact(p.total)) or ''
+  return padStart(usedCol, COL_USED) .. '   ' .. padEnd(PERIOD_LABELS[p.label] or p.label, COL_LABEL)
 end
 
 local function buildMenu()
@@ -210,32 +302,57 @@ local function buildMenu()
     table.insert(menu, { title = '正在更新…', disabled = true })
   end
 
-  if lastData then
-    for _, p in ipairs(collectPeriods(lastData)) do
-      table.insert(menu, {
-        title = hs.styledtext.new(columnOne(p) .. '   ' .. columnTwo(p), { font = MENU_FONT }),
-        tooltip = string.format('已用 %.1f%%（%s / %s）\n重置时间 %s',
-          p.percent, formatNumber(p.used), formatNumber(p.total),
-          p.resetEpoch and os.date('%m-%d %H:%M', p.resetEpoch) or '?'),
-        -- 不能设 disabled（macOS 会把文字变灰）；给空 fn 保持正常文字颜色且可高亮
-        fn = function() end,
-      })
-    end
+  -- 当前状态栏显示的 plan（用于标题行打勾）
+  local selG = resolvePrimary()
 
-    -- 套餐档位（去重）
-    local tiers = {}
-    for _, item in ipairs(lastData) do
-      local tier = table.concat({ item.edition, item.tier }, ' '):gsub('^%s+', '')
-      if tier ~= '' and not hs.fnutils.contains(tiers, tier) then
-        table.insert(tiers, tier)
+  if lastData then
+    for gi, g in ipairs(lastData) do
+      if gi > 1 then table.insert(menu, { title = '-' }) end
+      -- plan 标题行：点击即把该 plan 设为状态栏显示；标题用系统默认字体、保持左对齐。
+      -- 选中标记 ✓ 直接拼在标题末尾（普通文字，不占用菜单项左侧状态图标区，不会向左突出）
+      local header = g.name
+      if #g.tiers > 0 then header = header .. '  ·  ' .. table.concat(g.tiers, ', ') end
+      local isSelected = selG == g
+      if isSelected then header = header .. '  ✓' end
+      table.insert(menu, {
+        title = header,
+        tooltip = isSelected and '当前显示在状态栏' or '点击在状态栏显示该 plan',
+        fn = function()
+          if g.product == PRIMARY_PRODUCT then
+            currentProduct = nil
+            hs.settings.clear(SETTINGS_KEY)
+          else
+            currentProduct = g.product
+            hs.settings.set(SETTINGS_KEY, currentProduct)
+          end
+          updateMenubar()
+        end,
+      })
+
+      for _, p in ipairs(g.periods) do
+        local tooltip
+        if p.numeric then
+          tooltip = string.format('%s %s\n已用 %.1f%%（%s / %s）\n重置时间 %s',
+            g.name, p.label, p.percent, formatNumber(p.used), formatNumber(p.total),
+            p.resetEpoch and os.date('%m-%d %H:%M', p.resetEpoch) or '?')
+        else
+          tooltip = string.format('%s %s\n已用 %.1f%%\n重置时间 %s',
+            g.name, p.label, p.percent,
+            p.resetEpoch and os.date('%m-%d %H:%M', p.resetEpoch) or '?')
+        end
+        table.insert(menu, {
+          title = hs.styledtext.new(columnOne(p) .. '   ' .. columnTwo(p), { font = MENU_FONT }),
+          tooltip = tooltip,
+          -- 不能设 disabled（macOS 会把文字变灰）；给空 fn 保持正常文字颜色且可高亮
+          fn = function() end,
+        })
       end
     end
-    table.insert(menu, { title = '-' })
-    table.insert(menu, { title = table.concat(tiers, ', '), fn = function() end })
   elseif not loading then
     table.insert(menu, { title = '用量获取失败', fn = function() end })
   end
 
+  table.insert(menu, { title = '-' })
   table.insert(menu, { title = '刷新', fn = function() refresh() end })
   return menu
 end
@@ -254,7 +371,7 @@ local function onExit(code, stdout, stderr)
     updateMenubar()
     return
   end
-  lastData = data.items
+  lastData = groupItems(data.items)
   lastUpdated = os.time()
   updateMenubar()
 end
