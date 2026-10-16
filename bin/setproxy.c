@@ -6,7 +6,7 @@
 //
 // Accepted actions:
 //   local  - use the proxy running on this Mac:      127.0.0.1:7890
-//   remote - use the proxy on the LAN proxy machine: 192.168.31.201:7890
+//   remote - use the proxy on the LAN proxy machine: 192.168.31.101:7890
 //   off    - disable HTTP, HTTPS and SOCKS proxies
 //
 // The network service, proxy endpoints and executable path are compiled in.
@@ -24,7 +24,7 @@
 #define NETWORKSETUP "/usr/sbin/networksetup"
 #define NETWORK_SERVICE "Wi-Fi"
 #define LOCAL_PROXY_HOST "127.0.0.1"
-#define REMOTE_PROXY_HOST "192.168.31.201"
+#define REMOTE_PROXY_HOST "192.168.31.101"
 #define PROXY_PORT "7890"
 
 // Every command currently has at most six arguments plus the trailing NULL.

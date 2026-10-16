@@ -154,15 +154,19 @@ local function buildIndex()
   index = {}
 
   for cmd in pairs(commands) do
+    -- subText 可以是函数：每次建索引时动态求值（例如展示当前代理状态）
+    local subText = type(cmd.subText) == 'function' and cmd.subText() or cmd.subText
+    local fields = { cmd.text, subText, cmd.keyword }
+    if cmd.aliases then
+      for _, alias in ipairs(cmd.aliases) do
+        table.insert(fields, alias)
+      end
+    end
     table.insert(index, {
-      fields = {
-        cmd.text,
-        cmd.subText,
-        cmd.keyword,
-      },
+      fields = fields,
       row = {
         text = cmd.keyword and (cmd.keyword .. '  ' .. cmd.text) or cmd.text,
-        subText = cmd.subText,
+        subText = subText,
         image = cmd.image,
       },
       action = function()
@@ -272,6 +276,7 @@ end
 ------------------------------------------------------------
 -- Chooser
 ------------------------------------------------------------
+local proxyChooser -- 代理二级选择面板（前向声明，供 toggle 引用）
 chooser = hs.chooser.new(completion)
 assert(chooser, 'hs.chooser 不可用')
 chooser:width(CONFIG.width)
@@ -322,7 +327,8 @@ chooser:queryChangedCallback(scheduleRefresh)
 
 local function show()
   if not apps then loadApps() end
-  if not index then buildIndex() end
+  -- 每次唤出都重建索引，使动态 subText（如当前代理状态）保持最新
+  buildIndex()
   switchToTempLayout()
   chooser:query('')
   chooser:choices(buildChoices(''))
@@ -334,7 +340,9 @@ chooser:hideCallback(restoreLayout)
 
 -- 热键切换：已打开时再按一次关闭
 local function toggle()
-  if chooser:isVisible() then
+  if proxyChooser and proxyChooser:isVisible() then
+    proxyChooser:cancel()
+  elseif chooser:isVisible() then
     chooser:cancel()
   else
     show()
@@ -378,6 +386,86 @@ register({
       hs.alert.show('notes_sync 不可用：请确认 modules.sync_git 已加载', { duration = 3 })
     end
   end,
+})
+
+-- 代理切换（由 modules.feat_auto_proxy 提供 setProxy / refreshStatus / current）
+local autoProxy = require('modules.feat_auto_proxy')
+
+local PROXY_OPTIONS = { {
+  action = 'remote',
+  label = '远程代理',
+  detail = '192.168.31.101:7890',
+}, {
+  action = 'local',
+  label = '本机代理',
+  detail = '127.0.0.1:7890',
+}, {
+  action = 'off',
+  label = '关闭代理',
+  detail = '关闭系统 HTTP/HTTPS/SOCKS 代理',
+} }
+
+local proxyActionStore = {}
+
+local function proxyDescription()
+  local cur = autoProxy.current and autoProxy.current()
+  if cur == 'remote' then return '当前：远程代理（192.168.31.101:7890），回车切换…' end
+  if cur == 'local' then return '当前：本机代理（127.0.0.1:7890），回车切换…' end
+  if cur == 'off' then return '当前：代理已关闭，回车切换…' end
+  return '当前状态未知，回车选择…'
+end
+
+local function buildProxyChoices()
+  proxyActionStore = {}
+  local choices = {}
+  local cur = autoProxy.current and autoProxy.current()
+  for _, opt in ipairs(PROXY_OPTIONS) do
+    local id = #proxyActionStore + 1
+    proxyActionStore[id] = opt.action
+    local mark = (cur == opt.action) and '✓ ' or ''
+    table.insert(choices, {
+      text = mark .. opt.label,
+      subText = opt.detail,
+      __id = id,
+    })
+  end
+  return choices
+end
+
+local function showProxyChooser()
+  -- 先用缓存状态立即展示，避免等待 networksetup 读取完成
+  proxyChooser:choices(buildProxyChoices())
+  proxyChooser:show()
+  autoProxy.refreshStatus(function()
+    if proxyChooser:isVisible() then
+      proxyChooser:choices(buildProxyChoices())
+    end
+  end)
+end
+
+proxyChooser = hs.chooser.new(function(choice)
+  if choice and choice.__id then
+    local action = proxyActionStore[choice.__id]
+    if action and type(autoProxy.setProxy) == 'function' then
+      autoProxy.setProxy(action)
+    end
+  end
+end)
+proxyChooser:width(CONFIG.width)
+proxyChooser:rows(4)
+proxyChooser:placeholderText('选择要切换到的代理…')
+proxyChooser:searchSubText(false)
+if proxyChooser.bgDark then
+  proxyChooser:bgDark(true)
+else
+  pcall(function() proxyChooser:darkMode(true) end)
+end
+
+register({
+  text = '切换代理',
+  subText = proxyDescription,
+  aliases = { 'proxy', '代理' },
+  action = showProxyChooser,
 })
 
 register({
