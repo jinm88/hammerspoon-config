@@ -1,18 +1,17 @@
 -- 手动切换系统 HTTP/HTTPS/SOCKS 代理（由命令面板 feat_command_palette 调用）。
 --
--- 不再监听 Wi-Fi，也不做自动健康检查；代理只在用户从面板选择时切换。
+-- 直接调用 /usr/sbin/networksetup，不再依赖 setuid helper。首次执行某个动作时
+-- macOS 会弹一次管理员授权，之后该动作即被记住、可静默执行。代理端点与
+-- networksetup 参数均为模块内硬编码，不拼接 shell 命令、不接受外部输入。
 --
--- 代理端点和 networksetup 指令封装在 root:wheel 的 Setuid helper 中；
--- 本模块只允许向 helper 传入硬编码的 "local"、"remote" 或 "off"，不拼接 shell 命令。
---
--- helper profile：
+-- profile：
 --   local  -> 127.0.0.1:7890
 --   remote -> 192.168.31.101:7890
 
 local log = hs.logger.new('proxy', 'info')
 
 local NETWORKSETUP_PATH = '/usr/sbin/networksetup'
-local HELPER_PATH = os.getenv('HOME') .. '/.hammerspoon/bin/setproxy'
+local NETWORK_SERVICE = 'Wi-Fi'
 
 local PROFILES = {
 	['local'] = { host = '127.0.0.1', name = '本机代理' },
@@ -24,6 +23,8 @@ local PROXY_PORT = 7890
 -- 当前本模块确认/设定的代理动作：'local' | 'remote' | 'off' | nil（未知）
 local currentAction = nil
 
+local describe -- 前向声明：setProxy 的回读校验会用到
+
 local function trim(value)
 	if value == nil then
 		return ''
@@ -31,38 +32,55 @@ local function trim(value)
 	return (value:gsub('^%s*(.-)%s*$', '%1'))
 end
 
-local function runProxyHelper(action)
-	if hs.fs.attributes(HELPER_PATH) == nil then
-		log.ef('代理 helper 不存在：%s', HELPER_PATH)
-		return false, 'helper 不存在：' .. HELPER_PATH
+-- 按 profile 生成 networksetup 调用序列（硬编码参数，无 shell 拼接）。
+local function proxyCommands(action)
+	if action == 'off' then
+		return {
+			{ '-setwebproxystate', NETWORK_SERVICE, 'off' },
+			{ '-setsecurewebproxystate', NETWORK_SERVICE, 'off' },
+			{ '-setsocksfirewallproxystate', NETWORK_SERVICE, 'off' },
+		}
 	end
+	local host = PROFILES[action].host
+	local port = tostring(PROXY_PORT)
+	return {
+		{ '-setwebproxy', NETWORK_SERVICE, host, port },
+		{ '-setsecurewebproxy', NETWORK_SERVICE, host, port },
+		{ '-setsocksfirewallproxy', NETWORK_SERVICE, host, port },
+		{ '-setwebproxystate', NETWORK_SERVICE, 'on' },
+		{ '-setsecurewebproxystate', NETWORK_SERVICE, 'on' },
+		{ '-setsocksfirewallproxystate', NETWORK_SERVICE, 'on' },
+	}
+end
 
-	local completed = false
-	local succeeded = false
-	local failureMessage = nil
-
-	local task = hs.task.new(HELPER_PATH, function(exitCode, stdOut, stdErr)
-		completed = true
-		succeeded = exitCode == 0
-		if not succeeded then
-			failureMessage = trim(stdErr)
-			if failureMessage == '' then
-				failureMessage = trim(stdOut)
-			end
-			if failureMessage == '' then
-				failureMessage = 'exit code ' .. tostring(exitCode)
-			end
-			log.ef('代理切换失败：%s', failureMessage)
+-- 依次执行一串 networksetup 命令，全部成功才回调 true；任一失败立即终止并
+-- 回调 false。逐条执行比单条 -setproxystate 重试更直观，且授权只会出现在第一次。
+local function runCommandSequence(commands, done)
+	local index = 1
+	local function step()
+		if index > #commands then
+			done(true)
+			return
 		end
-	end, { action })
-
-	if task == nil or not task:start() then
-		log.e('无法启动代理 helper')
-		return false, '无法启动代理 helper'
+		local args = commands[index]
+		local task = hs.task.new(NETWORKSETUP_PATH, function(exitCode, _, stdErr)
+			if exitCode == 0 then
+				index = index + 1
+				step()
+			else
+				local msg = trim(stdErr)
+				if msg == '' then
+					msg = 'exit code ' .. tostring(exitCode)
+				end
+				log.ef('networksetup 失败 [%s]：%s', table.concat(args, ' '), msg)
+				done(false, msg)
+			end
+		end, args)
+		if task == nil or not task:start() then
+			done(false, '无法启动 networksetup')
+		end
 	end
-
-	task:waitUntilExit()
-	return completed and succeeded, failureMessage
+	step()
 end
 
 local function parseProxyState(output)
@@ -83,9 +101,9 @@ local function readProxyState(callback)
 	local remaining = 3
 
 	local checks = {
-		{ key = 'web', args = { '-getwebproxy', 'Wi-Fi' } },
-		{ key = 'secure', args = { '-getsecurewebproxy', 'Wi-Fi' } },
-		{ key = 'socks', args = { '-getsocksfirewallproxy', 'Wi-Fi' } },
+		{ key = 'web', args = { '-getwebproxy', NETWORK_SERVICE } },
+		{ key = 'secure', args = { '-getsecurewebproxy', NETWORK_SERVICE } },
+		{ key = 'socks', args = { '-getsocksfirewallproxy', NETWORK_SERVICE } },
 	}
 
 	for _, check in ipairs(checks) do
@@ -153,22 +171,33 @@ local function setProxy(action)
 		end
 
 		log.i('准备修改系统代理：' .. action)
-		local ok, failureMessage = runProxyHelper(action)
-		if not ok then
-			hs.alert.show('代理切换失败：' .. (failureMessage or '未知错误'), { duration = 3 })
-			return
-		end
+		runCommandSequence(proxyCommands(action), function(ok, failureMessage)
+			if not ok then
+				hs.alert.show('代理切换失败：' .. (failureMessage or '未知错误'), { duration = 3 })
+				return
+			end
 
-		currentAction = action
-		hs.notify.new({
-			title = 'Hammerspoon',
-			informativeText = '已切换为' .. profile.name,
-		}):send()
+			-- 回读验证（macOS 生效可能有极短延迟），成功才算完成
+			hs.timer.doAfter(0.5, function()
+				readProxyState(function(newState)
+					if proxyStateMatches(newState, action) then
+						currentAction = action
+						hs.notify.new({
+							title = 'Hammerspoon',
+							informativeText = '已切换为' .. profile.name,
+						}):send()
+					else
+						log.e('代理切换后状态校验失败：期望 %s，实际 %s', action, describe(newState))
+						hs.alert.show('代理切换未生效，请检查网络设置', { duration = 3 })
+					end
+				end)
+			end)
+		end)
 	end)
 end
 
 -- 面板「查看代理状态」用：刷新后回调返回当前状态描述。
-local function describe(state)
+function describe(state)
 	if state.web == nil or state.secure == nil or state.socks == nil then
 		return '代理状态未知'
 	end
