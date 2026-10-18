@@ -6,28 +6,32 @@
 
 -- 导出应用列表供其他模块使用
 -- 分层定义：先按 mods 分组，组内定义 apps 列表2
+-- 一律用 bundleID 启动（hs.application.launchOrFocusByBundleID），
+-- 避免同名 app 的名字解析歧义（如 Hermes 安装器 com.nousresearch.hermes.setup
+-- 与桌面版 com.nousresearch.hermes 都叫 "Hermes"）。
+-- name 仅用于 alert 展示。
 local keyboardProfile = require('modules.keyboard_profile')
 
 local APP_GROUPS = {
   {
     mods = {'lOpt'},
     apps = {
-      { key = 'f1', name = 'Google Chrome', desc = 'Chrome' },
-      { key = 'f2', name = 'Obsidian' },
-      { key = 'f3', name = 'Microsoft To Do', desc = 'To Do' },
-      { key = 'f4', name = 'Telegram' },
-      { key = 'f5', name = 'Safari' },
+      { key = 'f1', name = 'Google Chrome', bundleID = 'com.google.Chrome' },
+      { key = 'f2', name = 'Obsidian', bundleID = 'md.obsidian' },
+      { key = 'f3', name = 'Microsoft To Do', desc = 'To Do', bundleID = 'com.microsoft.to-do-mac' },
+      { key = 'f4', name = 'Telegram', bundleID = 'ru.keepcoder.Telegram' },
+      { key = 'f5', name = 'Safari', bundleID = 'com.apple.Safari' },
     },
   },
   {
     mods = {'lCmd'},
     apps = {
-      { key = 'f1', name = 'Hermes' },
-      { key = 'f2', name = 'Ghostty' },
-      { key = 'f3', name = 'iTerm' },
-      { key = 'f4', name = 'ZedG' },
-      { key = 'f5', name = 'Visual Studio Code', desc = 'VSCode' },
-      { key = 'f6', name = 'CotEditor' },
+      { key = 'f1', name = 'Hermes', bundleID = 'com.nousresearch.hermes' },
+      { key = 'f2', name = 'Ghostty', bundleID = 'com.mitchellh.ghostty' },
+      { key = 'f3', name = 'iTerm', bundleID = 'com.googlecode.iterm2' },
+      { key = 'f4', name = 'Zed', desc = 'ZedG', bundleID = 'dev.zed.Zed' },
+      { key = 'f5', name = 'Visual Studio Code', desc = 'VSCode', bundleID = 'com.microsoft.VSCode' },
+      { key = 'f6', name = 'CotEditor', bundleID = 'com.coteditor.CotEditor' },
     },
   },
 }
@@ -41,6 +45,7 @@ for _, group in ipairs(APP_GROUPS) do
       key = app.key,
       name = app.name,
       desc = app.desc,
+      bundleID = assert(app.bundleID, '缺少 bundleID: ' .. app.name),
     })
   end
 end
@@ -88,11 +93,10 @@ end
 
 -- 3. 绑定应用启动热键
 for _, appConfig in ipairs(M.appList) do
-  local appName = appConfig.name
   addAction(appConfig.mods, appConfig.key, function()
-    -- 未运行则启动，已运行则切换焦点
-    if not hs.application.launchOrFocus(appName) then
-      hs.alert.show('未找到应用或启动失败: ' .. appName)
+    -- 未运行则启动，已运行则切换焦点；按 bundleID 精确匹配，避免同名 app 歧义
+    if not hs.application.launchOrFocusByBundleID(appConfig.bundleID) then
+      hs.alert.show('未找到应用或启动失败: ' .. appConfig.name)
     end
   end)
 end
