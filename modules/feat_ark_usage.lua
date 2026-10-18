@@ -10,10 +10,18 @@
 --
 -- 状态栏默认显示 agent-plan（其主周期为滚动 5h 窗口）；点击菜单中任意 plan 标题行
 -- 即可切换状态栏显示哪个 plan（选择持久化到 hs.settings），周期固定取该 plan 的
--- 主周期（agent-plan=5h，coding-plan=session）。当前 plan 在标题行末尾以 ✓ 标记。
+-- 主周期（agent-plan=5h，coding-plan=session）。标题行最前预留一格状态位，
+-- 当前状态栏显示的 plan 在该位标 ✓，其余留空对齐。
+-- 例外：若所选 plan 的某个更长周期余量比主周期还少（长周期先见底，短周期的
+-- 可用量实际被它封顶，数字没有意义），状态栏改为显示余量最少的长周期。
+-- 余量比较一律用绝对余量（total-used，同 plan 单位一致）；只给 percent、
+-- 没有具体数值的周期无法换算成量，不参与比较（coding-plan 因此不触发该切换）。
+-- 菜单中被长周期「压住」的短周期行不隐藏，用系统禁用态（disabled）显示：
+-- macOS 自动置灰且不可选中。
 --
--- 菜单行（Menlo 等宽对齐）每行依次为：倒计时（5h/session 显示 时:分，周/月显示
--- 剩余天数如 12d）、整数百分比、已用/总量（紧凑格式）、周期名。
+-- 菜单行（Menlo 等宽对齐）每行依次为：倒计时（5h/session 显示 时:分；周/月满 1 天
+-- 显示剩余天数如 12d，不足 1 天同样显示 时:分）、整数剩余百分比（向上取整避免 0%）、周期名。
+-- （使用量和已用/总量数值不占列，只在各行 tooltip 中展示）
 
 local log = hs.logger.new('arkusage', 'warning')
 
@@ -45,6 +53,9 @@ local PERIOD_LABELS = {
 
 -- 菜单行顺序；状态栏默认显示的 plan 见 PRIMARY_PRODUCT，其主周期见 PRIMARY_LABELS
 local PERIOD_ORDER = { 'session', '5h', 'daily', 'weekly', 'monthly' }
+-- 周期长短排名（下标即长短序），用于判断某周期是否比主周期更长
+local PERIOD_RANK = {}
+for i, label in ipairs(PERIOD_ORDER) do PERIOD_RANK[label] = i end
 local PRIMARY_PRODUCT = 'agent-plan'
 
 -- 本机本地时区相对 UTC 的偏移秒数（东八区为 +28800），用于正确解析带偏移的 ISO 时间
@@ -90,20 +101,6 @@ local function formatNumber(n)
   return int .. (frac or '')
 end
 
--- 紧凑数字：10,000 -> 10K，1,500 -> 1.5K，2,000,000 -> 2M
--- roundUp=true 时缩放后向上取整，不保留小数：1,500 -> 2K，12,300 -> 13K
-local function formatCompact(n, roundUp)
-  if n == nil then return '?' end
-  local function trim(v)
-    if roundUp then return tostring(math.ceil(v)) end
-    return (math.floor(v) == v) and tostring(math.floor(v)) or string.format('%.1f', v)
-  end
-  local abs = math.abs(n)
-  if abs >= 1e6 then return trim(n / 1e6) .. 'M' end
-  if abs >= 1e3 then return trim(n / 1e3) .. 'K' end
-  return trim(n)
-end
-
 -- 带时区偏移的 ISO8601（2026-10-11T14:24:27+08:00）转 epoch
 local function isoToEpoch(iso)
   if not iso then return nil end
@@ -116,9 +113,11 @@ local function isoToEpoch(iso)
   return t - zOff + LOCAL_UTC_OFFSET
 end
 
--- 状态栏短倒计时：满 1 小时只显示整小时（1h），不足 1 小时显示分钟（43m）
+-- 状态栏短倒计时：满 1 天显示天数（12d）；满 1 小时只显示整小时（1h），
+-- 不足 1 小时显示分钟（43m）
 local function formatRemainingShort(sec)
   if sec < 0 then return nil end
+  if sec >= 86400 then return string.format('%dd', math.floor(sec / 86400)) end
   local totalMin = math.floor(sec / 60)
   if totalMin < 60 then return string.format('%dm', totalMin) end
   return string.format('%dh', math.floor(totalMin / 60))
@@ -130,18 +129,11 @@ local function formatRemainingHM(sec)
   return string.format('%d:%02d', math.floor(sec / 3600), math.floor((sec % 3600) / 60))
 end
 
--- 周/月长周期倒计时：粒度到天，满 1 天只显示天数（12d），不足 1 天才显示小时（23h05m）
+-- 周/月长周期倒计时：满 1 天只显示天数（12d）；不足 1 天与滚动窗口一样显示 时:分（23:05）
 local function formatRemainingDays(sec)
   if sec < 0 then return '--' end
-  local totalMin = math.floor(sec / 60)
-  local h = math.floor(totalMin / 60)
-  if h < 24 then
-    if totalMin < 60 then
-      return string.format('%dm', totalMin)
-    end
-    return string.format('%dh%02dm', h, totalMin % 60)
-  end
-  return string.format('%dd', math.floor(h / 24))
+  if sec < 24 * 3600 then return formatRemainingHM(sec) end
+  return string.format('%dd', math.floor(sec / 86400))
 end
 
 -- 把接口 items[] 按产品聚合成分组数组：
@@ -256,43 +248,68 @@ local function resolvePrimary()
   return g, p
 end
 
-local function primaryPeriod()
-  local _, p = resolvePrimary()
-  return p
+-- 在 g 的各周期中，找出比 p 更长且绝对余量（total-used）比 p 还少的周期里
+-- 余量最少的一个（即瓶颈落在更长周期上，p 的可用量实际被它封顶）；无则返回 nil。
+-- 只有双方都带具体数值才能比较；只给 percent 的周期无法换算成量，不参与比较
+local function tighterLongerPeriod(g, p)
+  if not p.numeric then return nil end
+  local pRank = PERIOD_RANK[p.label] or 0
+  local pAbs = p.total - p.used
+  local best, bestAbs
+  for _, q in ipairs(g.periods) do
+    if q.numeric and (PERIOD_RANK[q.label] or 0) > pRank then
+      local qAbs = q.total - q.used
+      if qAbs < pAbs and (not bestAbs or qAbs < bestAbs) then
+        best, bestAbs = q, qAbs
+      end
+    end
+  end
+  return best
+end
+
+-- 状态栏实际展示的周期：默认取主周期；若瓶颈在更长周期，则改为剩余最少的长周期
+local function displayPeriod()
+  local g, p = resolvePrimary()
+  if not p then return nil end
+  return tighterLongerPeriod(g, p) or p
+end
+
+-- 剩余百分比：状态栏与菜单行共用的唯一计算入口，保证两处永远一致；
+-- 向上取整，余量未尽不显示 0%
+local function remainingPercent(p)
+  return math.ceil(100 - p.percent)
 end
 
 -- 菜单统一字体；不指定 color，文字跟随系统菜单的正常颜色（自动适配深浅色模式）
 local MENU_FONT = { name = 'Menlo', size = 13 }
--- 列宽（显示宽度）：周期名 / 剩余时间 / 百分比 / 已用-总量
-local COL_LABEL, COL_REMAIN, COL_PCT, COL_USED = 5, 6, 4, 11
+-- 列宽（显示宽度）：周期名 / 剩余时间 / 百分比
+local COL_LABEL, COL_REMAIN, COL_PCT = 5, 6, 4
 
 local function updateMenubar()
-  local p = primaryPeriod()
+  local p = displayPeriod()
   if not p then
     menubar:setTitle(loading and '··' or '—')
     return
   end
-  -- 状态栏：短倒计时 + 百分比（4h·1%，不足 1 小时倒计时显示分钟）；百分比向上取整
-  local pct = math.ceil(p.percent)
+  -- 状态栏：短倒计时 + 剩余百分比（4h·57%，不足 1 小时倒计时显示分钟）
+  local pct = remainingPercent(p)
   local remain = p.resetEpoch and formatRemainingShort(p.resetEpoch - os.time())
   menubar:setTitle(remain and string.format('%s·%d%%', remain, pct) or pct .. '%')
 end
 
 -- 第一栏：倒计时 + 整数百分比
 local function columnOne(p)
-  -- 周/月显示剩余天数（粒度到天），5h/session 显示 时:分
+  -- 周/月满 1 天显示剩余天数，不足 1 天与 5h/session 一样显示 时:分
   local fmt = (p.label == 'weekly' or p.label == 'monthly') and formatRemainingDays or formatRemainingHM
   local remain = p.resetEpoch and fmt(p.resetEpoch - os.time()) or '--'
-  local pct = math.ceil(p.percent) .. '%'
+  local pct = remainingPercent(p) .. '%'
   -- 倒计时、百分比均右对齐
   return padStart(remain, COL_REMAIN) .. '   ' .. padStart(pct, COL_PCT)
 end
 
--- 第二栏：数值型周期显示 已用/总量（紧凑格式，已用向上取整，如 13K/100K）+ 周期名；
--- 百分比型周期没有用量数值，该列留空以保持周期名列对齐
+-- 第二栏：周期名
 local function columnTwo(p)
-  local usedCol = p.numeric and (formatCompact(p.used, true) .. '/' .. formatCompact(p.total)) or ''
-  return padStart(usedCol, COL_USED) .. '   ' .. padEnd(PERIOD_LABELS[p.label] or p.label, COL_LABEL)
+  return padEnd(PERIOD_LABELS[p.label] or p.label, COL_LABEL)
 end
 
 local function buildMenu()
@@ -309,11 +326,12 @@ local function buildMenu()
     for gi, g in ipairs(lastData) do
       if gi > 1 then table.insert(menu, { title = '-' }) end
       -- plan 标题行：点击即把该 plan 设为状态栏显示；标题用系统默认字体、保持左对齐。
-      -- 选中标记 ✓ 直接拼在标题末尾（普通文字，不占用菜单项左侧状态图标区，不会向左突出）
-      local header = g.name
-      if #g.tiers > 0 then header = header .. '  ·  ' .. table.concat(g.tiers, ', ') end
+      -- 标题前预留一格状态位：当前显示在状态栏的 plan 标 ✓，其余以空格补齐，
+      -- 保证各 plan 名称左对齐（普通文字，不占用菜单项左侧状态图标区，不会向左突出）
       local isSelected = selG == g
-      if isSelected then header = header .. '  ✓' end
+      local header = isSelected and '✓  ' or '    '
+      header = header .. g.name
+      if #g.tiers > 0 then header = header .. '  ·  ' .. table.concat(g.tiers, ', ') end
       table.insert(menu, {
         title = header,
         tooltip = isSelected and '当前显示在状态栏' or '点击在状态栏显示该 plan',
@@ -340,10 +358,13 @@ local function buildMenu()
             g.name, p.label, p.percent,
             p.resetEpoch and os.date('%m-%d %H:%M', p.resetEpoch) or '?')
         end
+        -- 瓶颈落在更长周期时，本周期行设为禁用态（macOS 自动置灰、不可选中）。
+        -- 普通周期行不能设 disabled（不想变灰），给空 fn 保持正常文字颜色且可高亮
+        local tighter = tighterLongerPeriod(g, p)
         table.insert(menu, {
           title = hs.styledtext.new(columnOne(p) .. '   ' .. columnTwo(p), { font = MENU_FONT }),
           tooltip = tooltip,
-          -- 不能设 disabled（macOS 会把文字变灰）；给空 fn 保持正常文字颜色且可高亮
+          disabled = tighter ~= nil,
           fn = function() end,
         })
       end
