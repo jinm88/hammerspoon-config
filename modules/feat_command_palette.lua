@@ -1,7 +1,7 @@
 --[[
   类 Alfred 命令触发器（Command Palette）
 
-  - 全局热键唤出搜索框（默认 ctrl+shift+space，见 CONFIG.hotkey），再次按下关闭
+  - 全局热键唤出搜索框（默认 shift+space，见 CONFIG.hotkey），再次按下关闭
   - 自定义命令：register() 注册，支持子标题/图标/关键字带参数
   - 应用启动：输入应用名，Lua 过滤后回车启动或聚焦
   - 直达网址：输入 http(s):// 开头的内容，回车在默认浏览器打开
@@ -24,7 +24,7 @@
 
 local CONFIG = {
   -- 唤出热键
-  hotkey = { { 'ctrl', 'shift' }, 'space' },
+  hotkey = { { 'shift' }, 'space' },
   -- 唤出时临时切到该系统输入法（避免微信等第三方输入法在 chooser 里卡顿）；
   -- 面板关闭后自动切回原输入法。置为 nil 可关闭此行为。
   tempLayout = 'com.apple.keylayout.ABC',
