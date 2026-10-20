@@ -20,7 +20,8 @@
 -- macOS 自动置灰且不可选中。
 --
 -- 菜单行（Menlo 等宽对齐）每行依次为：倒计时（5h/session 显示 时:分；周/月满 1 天
--- 显示剩余天数如 12d，不足 1 天同样显示 时:分）、整数剩余百分比（向上取整避免 0%）、周期名。
+-- 显示剩余天数如 12d，不足 1 天同样显示 时:分）、剩余百分比（保留一位小数）、周期名。
+-- 状态栏百分比规则不同：向下取整为整数；原始余量完全用尽（<= 0）时只显示剩余时间。
 -- （使用量和已用/总量数值不占列，只在各行 tooltip 中展示）
 
 local log = hs.logger.new('arkusage', 'warning')
@@ -289,16 +290,16 @@ local function displayPeriod()
   return tighterLongerPeriod(g, p) or p
 end
 
--- 剩余百分比：状态栏与菜单行共用的唯一计算入口，保证两处永远一致；
--- 向上取整，余量未尽不显示 0%
-local function remainingPercent(p)
-  return math.ceil(100 - p.percent)
+-- 菜单行剩余百分比：保留一位小数（如 57.3%）
+local function remainingPercentMenu(p)
+  return string.format('%.1f', 100 - p.percent)
 end
+
 
 -- 菜单统一字体；不指定 color，文字跟随系统菜单的正常颜色（自动适配深浅色模式）
 local MENU_FONT = { name = 'Menlo', size = 13 }
--- 列宽（显示宽度）：周期名 / 剩余时间 / 百分比
-local COL_LABEL, COL_REMAIN, COL_PCT = 5, 6, 4
+-- 列宽（显示宽度）：周期名 / 剩余时间 / 百分比（一位小数，如 100.0%）
+local COL_LABEL, COL_REMAIN, COL_PCT = 5, 6, 6
 
 local function updateMenubar()
   local p = displayPeriod()
@@ -306,18 +307,25 @@ local function updateMenubar()
     menubar:setTitle(loading and '··' or '—')
     return
   end
-  -- 状态栏：短倒计时 + 剩余百分比（4h·57%，不足 1 小时倒计时显示分钟）
-  local pct = remainingPercent(p)
+  -- 状态栏：短倒计时 + 向下取整的整数剩余百分比（4h·57%）；
+  -- 原始余量完全用尽（100-percent <= 0）时只显示剩余时间（等待重置）；
+  -- 判断用原始值而非取整后的值：余量 0.5% 取整为 0 仍显示 0%，不算用尽
+  local raw = 100 - p.percent
   local remain = p.resetEpoch and formatRemainingShort(p.resetEpoch - os.time())
-  menubar:setTitle(remain and string.format('%s·%d%%', remain, pct) or pct .. '%')
+  if raw <= 0 then
+    menubar:setTitle(remain or '0%')
+  else
+    local pct = math.floor(raw)
+    menubar:setTitle(remain and string.format('%s·%d%%', remain, pct) or pct .. '%')
+  end
 end
 
--- 第一栏：倒计时 + 整数百分比
+-- 第一栏：倒计时 + 一位小数百分比
 local function columnOne(p)
   -- 周/月满 1 天显示剩余天数，不足 1 天与 5h/session 一样显示 时:分
   local fmt = (p.label == 'weekly' or p.label == 'monthly') and formatRemainingDays or formatRemainingHM
   local remain = p.resetEpoch and fmt(p.resetEpoch - os.time()) or '--'
-  local pct = remainingPercent(p) .. '%'
+  local pct = remainingPercentMenu(p) .. '%'
   -- 倒计时、百分比均右对齐
   return padStart(remain, COL_REMAIN) .. '   ' .. padStart(pct, COL_PCT)
 end
