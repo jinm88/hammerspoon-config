@@ -178,13 +178,18 @@ local function setProxy(action)
 			end
 
 			-- 回读验证（macOS 生效可能有极短延迟），成功才算完成
-			hs.timer.doAfter(0.5, function()
+			-- 全局变量持有 timer 防 GC
+			proxy_verify_timer = hs.timer.doAfter(0.5, function()
 				readProxyState(function(newState)
 					if proxyStateMatches(newState, action) then
 						currentAction = action
+						local text = '已切换为' .. profile.name
+						if profile.host then
+							text = string.format('%s（%s:%d）', text, profile.host, PROXY_PORT)
+						end
 						hs.notify.new({
 							title = 'Hammerspoon',
-							informativeText = '已切换为' .. profile.name,
+							informativeText = text,
 						}):send()
 					else
 						log.e('代理切换后状态校验失败：期望 %s，实际 %s', action, describe(newState))
@@ -228,6 +233,50 @@ end
 
 -- 模块加载时读取一次真实状态，避免面板显示与系统设置脱节。
 refreshStatus()
+
+-- 启动时自动选择可用代理：按顺序探测各 profile 的端口连通性，
+-- 第一个能连通的设为系统代理；都不可达则保持系统现状。
+local STARTUP_PROBE_ORDER = { 'local', 'remote' } -- 探测优先级，本机优先
+local STARTUP_PROBE_DELAY = 5 -- 启动延迟（秒），等网络与代理客户端就绪
+
+-- nc -z -G 2：仅探测 TCP 连通性不传输数据，2 秒超时
+local function probePort(host, port, callback)
+	local task = hs.task.new('/usr/bin/nc', function(exitCode)
+		callback(exitCode == 0)
+	end, { '-z', '-G', '2', host, tostring(port) })
+	if task == nil or not task:start() then
+		callback(false)
+	end
+end
+
+local function autoConnectProxy(index)
+	local action = STARTUP_PROBE_ORDER[index]
+	if action == nil then
+		log.w('启动代理探测：所有 profile 均不可达，保持系统现状')
+		return
+	end
+	probePort(PROFILES[action].host, PROXY_PORT, function(reachable)
+		if not reachable then
+			autoConnectProxy(index + 1)
+			return
+		end
+		log.i('启动代理探测：' .. action .. ' 可达')
+		-- 探测阶段先判断：当前系统代理已是该目标则直接结束，不发起切换
+		readProxyState(function(state)
+			if proxyStateMatches(state, action) then
+				currentAction = action
+				log.i('当前系统代理已是 ' .. action .. '，无需切换')
+				return
+			end
+			setProxy(action)
+		end)
+	end)
+end
+
+-- 全局变量持有 timer 防 GC：hs.timer 不被 Lua 引用时可能被回收，回调永不触发
+proxy_startup_timer = hs.timer.doAfter(STARTUP_PROBE_DELAY, function()
+	autoConnectProxy(1)
+end)
 
 return {
 	-- 手动切换：setProxy('local' | 'remote' | 'off')
