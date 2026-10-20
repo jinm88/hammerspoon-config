@@ -1,28 +1,27 @@
 -- Git 仓库自动同步（支持多个目录，互不干扰）
--- 每个仓库独立定时执行：提交本地改动（文件静默一段时间后）-> rebase 拉取 -> 推送
+-- 触发方式：Obsidian 启动、退出时自动同步全部仓库（无防抖）；不再定时轮询
+-- 每个仓库独立执行：提交本地改动（文件静默一段时间后）-> rebase 拉取 -> 推送
 -- 也可在 Hammerspoon Console 中手动触发，如 notes_sync()、sync_git_all()
 
 -- ============================== 配置区 ==============================
 -- dir:           仓库绝对路径
 -- interval:      自动执行间隔（秒）
--- quietSeconds:  待提交文件最后修改距今超过该秒数才提交，避免提交写入中的文件
+-- quietSeconds:  待提交文件最后修改距今超过该秒数才提交，避免提交写入中的文件；0 = 不判断静默
 -- label:         通知中显示的名称（默认取目录名）
 local REPOS = {
 	{
 		dir = os.getenv("HOME") .. "/notes",
-		interval = 180,
-		quietSeconds = 300,
+		quietSeconds = 0, -- 不判断静默，触发即提交
 		label = "notes",
 		manualName = "notes_sync", -- 暴露的全局手动触发函数名（可选）
 	},
 	-- 追加更多仓库示例：
 	-- {
 	-- 	dir = os.getenv("HOME") .. "/dotfiles",
-	-- 	interval = 600,
 	-- 	quietSeconds = 300,
 	-- },
 }
-local FIRST_RUN_DELAY = 5 -- 加载后首次执行延迟，等网络就绪
+local TRIGGER_APP = "Obsidian" -- 该 App 启动/退出时触发同步
 -- ===================================================================
 
 -- 离线/网络类错误特征，命中则保持安静（定时任务频繁报错太吵）
@@ -163,14 +162,6 @@ local function createSyncer(cfg)
 			:start()
 	end
 
-	-- 全局表持有 timer 防 GC
-	git_sync_timers = git_sync_timers or {}
-	local timer = hs.timer.new(cfg.interval or 300, sync)
-	timer:start()
-	table.insert(git_sync_timers, timer)
-
-	hs.timer.doAfter(FIRST_RUN_DELAY, sync)
-
 	-- 暴露手动触发入口
 	if cfg.manualName then
 		_G[cfg.manualName] = sync
@@ -203,3 +194,17 @@ function sync_git(dir)
 		}):send()
 	end
 end
+
+-- Obsidian 启动/退出时自动同步全部仓库，不做防抖
+local TRIGGER_EVENTS = {
+	[hs.application.watcher.launched] = true, -- Obsidian 启动完成
+	[hs.application.watcher.terminated] = true, -- Obsidian 退出
+}
+-- 全局变量持有 watcher 防 GC
+git_sync_app_watcher = hs.application.watcher.new(function(appName, event)
+	if appName ~= TRIGGER_APP or not TRIGGER_EVENTS[event] then
+		return
+	end
+	sync_git_all()
+end)
+git_sync_app_watcher:start()

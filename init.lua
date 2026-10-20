@@ -31,6 +31,7 @@ require('modules.input_method_indicator')
 require('modules.fix_cursor_ui_view')
 require('modules.feat_smart_ime')
 require('modules.auto_disconnect_bt_mic')
+-- 笔记同步：Obsidian 启动/退出时触发（无防抖），不定时轮询
 require('modules.sync_git')
 require('modules.feat_command_palette')
 

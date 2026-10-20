@@ -375,8 +375,8 @@ register(makeShell('打开 Hammerspoon 配置', 'open ~/.hammerspoon'))
 
 -- 同步笔记目录（由 modules.sync_git 提供全局 notes_sync）
 register({
-  text = '同步笔记目录',
-  subText = 'git commit / pull --rebase / push ~/notes',
+  text = '同步目录 ~/notes',
+  subText = 'git commit / pull --rebase / push',
   keyword = 'sync',
   action = function()
     if type(notes_sync) == 'function' then
