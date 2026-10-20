@@ -29,9 +29,24 @@ local REFRESH_INTERVAL = 60 -- 秒；既是接口轮询间隔，也是倒计时�
 local ARKCLI = hs.fs.pathToAbsolute('~/.npm-global/bin/arkcli') or '/Users/jin/.npm-global/bin/arkcli'
 
 -- GUI 启动的 Hammerspoon PATH 极简（通常只有 /usr/bin:/bin），而 arkcli 是
--- #!/usr/bin/env node 脚本，需把 node 所在目录补进去，否则 task 直接 127
-local NODE_BIN = hs.fs.pathToAbsolute('~/.local/bin') or '/Users/jin/.local/bin'
-local TASK_ENV = { PATH = NODE_BIN .. ':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin', HOME = os.getenv('HOME') }
+-- #!/usr/bin/env node 脚本，需把 node 所在目录补进去，否则 task 直接 127。
+-- hs.execute 第二参数 true = 在用户登录 shell 环境中执行（加载 ~/.zprofile 等，
+-- 拿到真实 PATH），直接让 shell 告诉我们 node 在哪，不用猜候选目录。
+-- 仅在模块加载时执行一次的同步调用，登录 shell 启动开销可忽略。
+local NODE_BIN do
+  local out, ok = hs.execute('command -v node', true)
+  -- 取输出的最后一行，防登录 shell 的 rc 文件打印杂项内容污染
+  local path = ok and out and out:gsub('%s+$', ''):match('([^\n]+)$')
+  if path and path:sub(1, 1) == '/' and hs.fs.attributes(path, 'mode') then
+    NODE_BIN = path:match('^(.*)/[^/]+$')
+  else
+    NODE_BIN = '/usr/local/bin' -- 查询失败兜底
+  end
+end
+local TASK_ENV = {
+  PATH = table.concat({ NODE_BIN, '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin' }, ':'),
+  HOME = os.getenv('HOME'),
+}
 
 -- 产品展示名
 local PRODUCT_NAMES = {
