@@ -388,30 +388,36 @@ register({
   end,
 })
 
--- 代理切换（由 modules.feat_auto_proxy 提供 setProxy / refreshStatus / current）
+-- 代理切换（由 modules.feat_auto_proxy 提供 setProxy / refreshStatus / current / proxies）
 local autoProxy = require('modules.feat_auto_proxy')
 
-local PROXY_OPTIONS = { {
-  action = 'remote',
-  label = '远程代理',
-  detail = '192.168.31.101:7890',
-}, {
-  action = 'local',
-  label = '本机代理',
-  detail = '127.0.0.1:7890',
-}, {
-  action = 'off',
-  label = '关闭代理',
-  detail = '关闭系统 HTTP/HTTPS/SOCKS 代理',
-} }
+-- 选项动态生成：配置文件中的各端点（按声明顺序）+ 内置「关闭代理」
+local function proxyOptions()
+  local options = {}
+  for i, proxy in ipairs(autoProxy.proxies or {}) do
+    table.insert(options, {
+      action = i,
+      label = string.format('%s:%d', proxy.host, proxy.port),
+      detail = '系统 HTTP/HTTPS/SOCKS 代理',
+    })
+  end
+  table.insert(options, {
+    action = 'off',
+    label = '关闭代理',
+    detail = '关闭系统 HTTP/HTTPS/SOCKS 代理',
+  })
+  return options
+end
 
 local proxyActionStore = {}
 
 local function proxyDescription()
   local cur = autoProxy.current and autoProxy.current()
-  if cur == 'remote' then return '当前：远程代理（192.168.31.101:7890），回车切换…' end
-  if cur == 'local' then return '当前：本机代理（127.0.0.1:7890），回车切换…' end
   if cur == 'off' then return '当前：代理已关闭，回车切换…' end
+  if type(cur) == 'number' and autoProxy.proxies and autoProxy.proxies[cur] then
+    local proxy = autoProxy.proxies[cur]
+    return string.format('当前：%s:%d，回车切换…', proxy.host, proxy.port)
+  end
   return '当前状态未知，回车选择…'
 end
 
@@ -419,7 +425,7 @@ local function buildProxyChoices()
   proxyActionStore = {}
   local choices = {}
   local cur = autoProxy.current and autoProxy.current()
-  for _, opt in ipairs(PROXY_OPTIONS) do
+  for _, opt in ipairs(proxyOptions()) do
     local id = #proxyActionStore + 1
     proxyActionStore[id] = opt.action
     local mark = (cur == opt.action) and '✓ ' or ''
