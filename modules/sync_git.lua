@@ -1,17 +1,19 @@
 -- Git 仓库自动同步（支持多个目录，互不干扰）
--- 触发方式：Obsidian 启动、退出时自动同步全部仓库（无防抖）；不再定时轮询
--- 每个仓库独立执行：提交本地改动（文件静默一段时间后）-> rebase 拉取 -> 推送
--- 也可在 Hammerspoon Console 中手动触发，如 notes_sync()、sync_git_all()
+-- 触发方式：Obsidian 运行期间每 CHECK_INTERVAL 秒检查一次（启动后立即先检查一次），
+--           改动文件静默满 quietSeconds 秒才提交；每次检查先确认 Obsidian 仍在运行，
+--           已退出则停止轮询。Obsidian 退出瞬间无条件同步一次（不要求静默）。
+-- 每个仓库独立执行：提交本地改动 -> rebase 拉取 -> 推送
+-- 也可在 Hammerspoon Console 中手动触发，如 notes_sync()、sync_git_all()（手动触发不判断静默）
 
 -- ============================== 配置区 ==============================
 -- dir:           仓库绝对路径
--- interval:      自动执行间隔（秒）
--- quietSeconds:  待提交文件最后修改距今超过该秒数才提交，避免提交写入中的文件；0 = 不判断静默
+-- quietSeconds:  定时检查时，待提交文件最后修改距今超过该秒数才提交，避免提交写入中的文件
 -- label:         通知中显示的名称（默认取目录名）
+local CHECK_INTERVAL = 180 -- Obsidian 运行期间的检查间隔（秒）
 local REPOS = {
 	{
 		dir = os.getenv("HOME") .. "/notes",
-		quietSeconds = 0, -- 不判断静默，触发即提交
+		quietSeconds = 180, -- 定时检查：文件静默满 3 分钟才提交
 		label = "notes",
 		manualName = "notes_sync", -- 暴露的全局手动触发函数名（可选）
 	},
@@ -149,7 +151,8 @@ local function createSyncer(cfg)
 		notify("同步失败（code " .. tostring(code) .. "）：" .. detail)
 	end
 
-	local function sync()
+	-- quietSeconds 不传（手动触发）时按 0 处理，即不判断静默
+	local function sync(quietSeconds)
 		if state.syncing then
 			return -- 上一次还没跑完（网络挂起时防止任务堆积）
 		end
@@ -157,7 +160,7 @@ local function createSyncer(cfg)
 		-- callback 签名：(exitCode, stdOut, stdErr)
 		hs.task
 			.new("/bin/bash", handleResult, {
-				"-c", SYNC_SCRIPT, "git_sync", state.dir, tostring(state.quietSeconds),
+				"-c", SYNC_SCRIPT, "git_sync", state.dir, tostring(quietSeconds or 0),
 			})
 			:start()
 	end
@@ -176,17 +179,17 @@ for _, repo in ipairs(REPOS) do
 	syncers[repo.dir] = createSyncer(repo)
 end
 
--- 手动同步全部仓库；也可 sync_git("~/dotfiles") 按目录触发
+-- 手动同步全部仓库；也可 sync_git("~/dotfiles") 按目录触发。手动触发不判断静默
 function sync_git_all()
 	for _, sync in pairs(syncers) do
-		sync()
+		sync(0)
 	end
 end
 
 function sync_git(dir)
 	local sync = syncers[dir:gsub("^~", os.getenv("HOME"))]
 	if sync then
-		sync()
+		sync(0)
 	else
 		hs.notify.new({
 			title = "Git 同步",
@@ -195,16 +198,55 @@ function sync_git(dir)
 	end
 end
 
--- Obsidian 启动/退出时自动同步全部仓库，不做防抖
-local TRIGGER_EVENTS = {
-	[hs.application.watcher.launched] = true, -- Obsidian 启动完成
-	[hs.application.watcher.terminated] = true, -- Obsidian 退出
-}
--- 全局变量持有 watcher 防 GC
-git_sync_app_watcher = hs.application.watcher.new(function(appName, event)
-	if appName ~= TRIGGER_APP or not TRIGGER_EVENTS[event] then
+-- Obsidian 运行期间：启动即检查一次，之后每 CHECK_INTERVAL 秒检查一次
+-- 定时检查要求文件静默满各自仓库的 quietSeconds
+-- 某次检查发现 Obsidian 已退出：停止轮询并无条件同步一次（quietSeconds=0）
+-- 不监听退出事件——退出后的补同步只由轮询检查驱动
+local function obsidianRunning()
+	return hs.application.get(TRIGGER_APP) ~= nil
+end
+
+-- 全局变量持有 watcher/timer 防 GC
+git_sync_poll_timer = nil
+
+local function stopPolling()
+	if git_sync_poll_timer then
+		git_sync_poll_timer:stop()
+		git_sync_poll_timer = nil
+	end
+end
+
+local function scheduledCheck()
+	-- 发现 Obsidian 已退出：停掉轮询，无条件同步一次（不要求文件静默）
+	if not obsidianRunning() then
+		stopPolling()
+		sync_git_all()
 		return
 	end
-	sync_git_all()
+	for _, repo in ipairs(REPOS) do
+		syncers[repo.dir](repo.quietSeconds or 0)
+	end
+end
+
+local function startPolling()
+	-- 先停旧定时器再建新的，避免 Obsidian 快速退出又重开时出现多个轮询
+	-- 上一次同步任务未跑完时，syncer 内的 syncing 锁会让重叠的触发直接跳过
+	stopPolling()
+	scheduledCheck() -- 启动后立即检查一次
+	git_sync_poll_timer = hs.timer.doEvery(CHECK_INTERVAL, scheduledCheck)
+end
+
+git_sync_app_watcher = hs.application.watcher.new(function(appName, event)
+	if appName ~= TRIGGER_APP or event ~= hs.application.watcher.launched then
+		return
+	end
+	startPolling()
 end)
-git_sync_app_watcher:start()
+-- 只订阅 launched；terminated 不监听（注释掉），退出后的补同步由轮询检查发现应用不在来驱动
+-- git_sync_app_watcher:start()
+git_sync_app_watcher:start(hs.application.watcher.launched)
+
+-- Hammerspoon 启动/重载配置时 Obsidian 已在运行，则直接开始轮询
+if obsidianRunning() then
+	startPolling()
+end
