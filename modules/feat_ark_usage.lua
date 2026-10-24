@@ -22,6 +22,7 @@
 -- 菜单行（Menlo 等宽对齐）每行依次为：倒计时（5h/session 显示 时:分；周/月满 1 天
 -- 显示剩余天数如 12d，不足 1 天同样显示 时:分）、剩余百分比（保留一位小数）、周期名。
 -- 状态栏百分比规则不同：向下取整为整数；原始余量完全用尽（<= 0）时只显示剩余时间。
+-- 状态栏显示的是周/月长周期余量时，最前用 · 分隔标注 W/M（如 M·12d·57%），与 5h/session 区分。
 -- （使用量和已用/总量数值不占列，只在各行 tooltip 中展示）
 
 local log = hs.logger.new('arkusage', 'warning')
@@ -301,6 +302,9 @@ local MENU_FONT = { name = 'Menlo', size = 13 }
 -- 列宽（显示宽度）：周期名 / 剩余时间 / 百分比（一位小数，如 100.0%）
 local COL_LABEL, COL_REMAIN, COL_PCT = 5, 6, 6
 
+-- 状态栏中周/月长周期的角标字母（weekly -> W，monthly -> M）
+local PERIOD_MARKS = { weekly = 'W', monthly = 'M' }
+
 local function updateMenubar()
   local p = displayPeriod()
   if not p then
@@ -308,15 +312,18 @@ local function updateMenubar()
     return
   end
   -- 状态栏：短倒计时 + 向下取整的整数剩余百分比（4h·57%）；
+  -- 显示的是周/月长周期余量时最前用 · 分隔标注 W/M（M·12d·57%）；
   -- 原始余量完全用尽（100-percent <= 0）时只显示剩余时间（等待重置）；
   -- 判断用原始值而非取整后的值：余量 0.5% 取整为 0 仍显示 0%，不算用尽
   local raw = 100 - p.percent
+  local mark = PERIOD_MARKS[p.label]
+  local prefix = mark and (mark .. '·') or ''
   local remain = p.resetEpoch and formatRemainingShort(p.resetEpoch - os.time())
   if raw <= 0 then
-    menubar:setTitle(remain or '0%')
+    menubar:setTitle(prefix .. (remain or '0%'))
   else
     local pct = math.floor(raw)
-    menubar:setTitle(remain and string.format('%s·%d%%', remain, pct) or pct .. '%')
+    menubar:setTitle(remain and string.format('%s%s·%d%%', prefix, remain, pct) or prefix .. pct .. '%')
   end
 end
 
