@@ -277,6 +277,7 @@ end
 -- Chooser
 ------------------------------------------------------------
 local proxyChooser -- 代理二级选择面板（前向声明，供 toggle 引用）
+local fnRemapChooser -- FN 键映射二级选择面板（前向声明，供 toggle 引用）
 chooser = hs.chooser.new(completion)
 assert(chooser, 'hs.chooser 不可用')
 chooser:width(CONFIG.width)
@@ -342,6 +343,8 @@ chooser:hideCallback(restoreLayout)
 local function toggle()
   if proxyChooser and proxyChooser:isVisible() then
     proxyChooser:cancel()
+  elseif fnRemapChooser and fnRemapChooser:isVisible() then
+    fnRemapChooser:cancel()
   elseif chooser:isVisible() then
     chooser:cancel()
   else
@@ -390,6 +393,9 @@ register({
 
 -- 代理切换（由 modules.feat_auto_proxy 提供 setProxy / refreshStatus / current / proxies）
 local autoProxy = require('modules.feat_auto_proxy')
+
+-- FN 键映射（由 modules.fn_key_remap 提供枚举/切换接口）
+local fnRemap = require('modules.fn_key_remap')
 
 -- 选项动态生成：配置文件中的各端点（按声明顺序）+ 内置「关闭代理」
 local function proxyOptions()
@@ -472,6 +478,60 @@ register({
   subText = proxyDescription,
   aliases = { 'proxy', '代理' },
   action = showProxyChooser,
+})
+
+-- FN 键映射：二级选择器列出在线键盘，回车切换 rCtrl→Fn 映射
+local fnRemapActionStore = {}
+
+local function buildFnRemapChoices()
+  fnRemapActionStore = {}
+  local choices = {}
+  local keyboards = fnRemap.listKeyboards()
+  if #keyboards == 0 then
+    return { { text = '未发现可映射的外接键盘', subText = '已自动排除苹果设备、触控板与小米遥控器' } }
+  end
+  for _, kb in ipairs(keyboards) do
+    local mapped = fnRemap.findTarget(kb.vid, kb.pid) ~= nil
+    local id = #fnRemapActionStore + 1
+    fnRemapActionStore[id] = kb
+    local idHex = string.format('0x%04x/0x%04x', kb.vid, kb.pid)
+    table.insert(choices, {
+      text = (mapped and '✓ ' or '') .. kb.name,
+      subText = idHex .. (mapped and '  ·  已映射 rCtrl→Fn，回车移除' or '  ·  回车应用 rCtrl→Fn'),
+      __id = id,
+    })
+  end
+  return choices
+end
+
+local function showFnRemapChooser()
+  fnRemapChooser:choices(buildFnRemapChoices())
+  fnRemapChooser:show()
+end
+
+fnRemapChooser = hs.chooser.new(function(choice)
+  if choice and choice.__id then
+    local kb = fnRemapActionStore[choice.__id]
+    if kb then
+      fnRemap.toggleDevice(kb.vid, kb.pid, kb.name)
+    end
+  end
+end)
+fnRemapChooser:width(CONFIG.width)
+fnRemapChooser:rows(6)
+fnRemapChooser:placeholderText('选择要切换 rCtrl→Fn 映射的键盘…')
+fnRemapChooser:searchSubText(false)
+if fnRemapChooser.bgDark then
+  fnRemapChooser:bgDark(true)
+else
+  pcall(function() fnRemapChooser:darkMode(true) end)
+end
+
+register({
+  text = 'FN键映射',
+  subText = '管理外接键盘的右 Control → Fn 设备级映射',
+  aliases = { 'fn', 'remap', '改键' },
+  action = showFnRemapChooser,
 })
 
 register({
