@@ -7,8 +7,9 @@ require("hs.ipc")
 -- eventtap 健康守护：须在各事件监听模块之前加载
 require('modules.eventtap_health')
 
--- 初始化时判断当前键盘，热键模块据此选择右侧修饰键
-require('modules.keyboard_profile')
+-- RAPOO 右 Ctrl→Fn 的 hidutil 映射持久化（替代原 keyboard_profile：
+-- 右侧修饰键热键已统一为右 Command，不再需要按键盘类型切换）
+require('modules.fn_key_remap')
 
 -- 配置定位服务权限，获取wifi需要用到
 -- print(hs.location.get())

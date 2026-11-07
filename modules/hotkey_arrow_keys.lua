@@ -9,12 +9,11 @@
 -- 整段恢复，表现为「输出一段字符」）。
 -- 这里在每次 keyDown 时直接读取设备级左右修饰键状态，无注册竞态。
 --
--- 键盘连接状态变化时，由 keyboard_profile 自动切换右侧修饰键：
--- - Mac 内置键盘：rOpt
--- - 其他外接键盘：rCtrl
+-- 右侧修饰键统一为右 Command（2026-11 起）：
+-- 原方案按键盘类型在 rCtrl（外接）/rOpt（内置）间切换，已废弃，
+-- 见 git 历史中的 keyboard_profile.lua。右 Command 单键在系统中
+-- 无默认动作，且与左 Cmd 组合键互不干扰（精确匹配设备位）。
 -- **************************************************
-
-local keyboardProfile = require('modules.keyboard_profile')
 
 -- 不随键盘类型变化的基础绑定
 local BASE_KEY_LIST = {
@@ -26,32 +25,12 @@ local BASE_KEY_LIST = {
   { mods = {'lOpt'}, key = 'f', target = 'pagedown', desc = 'PageDown' },
   { mods = {'lOpt'}, key = 'q', target = 'home', desc = 'Home' },
   { mods = {'lOpt'}, key = 'e', target = 'end', desc = 'End' },
+  -- 原外接键盘 rCtrl、内置键盘 rOpt 的四组绑定，统一为右 Command
+  { mods = {'rCmd'}, key = '[', target = 'pageup', desc = 'PageUp' },
+  { mods = {'rCmd'}, key = ']', target = 'pagedown', desc = 'PageDown' },
+  { mods = {'rCmd'}, key = '-', target = 'home', desc = 'Home' },
+  { mods = {'rCmd'}, key = '=', target = 'end', desc = 'End' },
 }
-
--- 当前生效绑定；键盘类型变化时整体替换该表
-local KEY_LIST = {}
-
-local function copyBaseBindings()
-  local list = {}
-  for _, cfg in ipairs(BASE_KEY_LIST) do
-    table.insert(list, {
-      mods = cfg.mods,
-      key = cfg.key,
-      target = cfg.target,
-      desc = cfg.desc,
-    })
-  end
-  return list
-end
-
-local function addKeyBinding(list, mods, key, target, desc)
-  table.insert(list, {
-    mods = mods,
-    key = key,
-    target = target,
-    desc = desc,
-  })
-end
 
 -- 设备级修饰键位（raw flags，可区分左右）
 local RAW = hs.eventtap.event.rawFlagMasks
@@ -76,42 +55,20 @@ local function modBit(name)
   return DEVICE_BITS[n]
 end
 
-local function rebuildKeyList()
-  local list = copyBaseBindings()
-
-  if keyboardProfile.isNativeMacKeyboard then
-    -- Mac 内置键盘：保留原有的 lOpt [/] 翻页，rOpt -/= 到行首行尾
-    addKeyBinding(list, {'lOpt'}, '[', 'pageup', 'PageUp')
-    addKeyBinding(list, {'lOpt'}, ']', 'pagedown', 'PageDown')
-    addKeyBinding(list, {'rOpt'}, '-', 'home', 'Home')
-    addKeyBinding(list, {'rOpt'}, '=', 'end', 'End')
-  else
-    -- 一般外接键盘
-    addKeyBinding(list, {'rCtrl'}, '[', 'pageup', 'PageUp')
-    addKeyBinding(list, {'rCtrl'}, ']', 'pagedown', 'PageDown')
-    addKeyBinding(list, {'rCtrl'}, '-', 'home', 'Home')
-    addKeyBinding(list, {'rCtrl'}, '=', 'end', 'End')
+-- 预计算每条绑定所需的精确修饰位掩码、keycode
+local KEY_LIST = {}
+for _, cfg in ipairs(BASE_KEY_LIST) do
+  local mask = 0
+  for _, m in ipairs(cfg.mods) do
+    local bit = assert(modBit(m), '未知修饰键: ' .. m)
+    mask = mask | bit
   end
-
-  -- 预计算每条绑定所需的精确修饰位掩码、keycode
-  for _, cfg in ipairs(list) do
-    local mask = 0
-    for _, m in ipairs(cfg.mods) do
-      local bit = assert(modBit(m), '未知修饰键: ' .. m)
-      mask = mask | bit
-    end
-    cfg._modmask = mask
-    cfg._keycode = hs.keycodes.map[cfg.key]
-    cfg._target = hs.keycodes.map[cfg.target]
-  end
-
-  KEY_LIST = list
+  table.insert(KEY_LIST, {
+    _modmask = mask,
+    _keycode = hs.keycodes.map[cfg.key],
+    _target = hs.keycodes.map[cfg.target],
+  })
 end
-
-rebuildKeyList()
-
--- 键盘切换后替换绑定表；已有 keyDown eventtap 会实时读取新的 KEY_LIST
-keyboardProfile.subscribe(rebuildKeyList)
 
 -- 导出配置
 local M = {}
@@ -145,10 +102,6 @@ if health then
   health.register(function()
     return hs.eventtap.new({ hs.eventtap.event.types.keyDown }, handleKeyDown):start()
   end, 'arrow_keys')
-end
-
-function M.refresh()
-  rebuildKeyList()
 end
 
 return M

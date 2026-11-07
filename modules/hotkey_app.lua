@@ -10,7 +10,7 @@
 -- 避免同名 app 的名字解析歧义（如 Hermes 安装器 com.nousresearch.hermes.setup
 -- 与桌面版 com.nousresearch.hermes 都叫 "Hermes"）。
 -- name 仅用于 alert 展示。
-local keyboardProfile = require('modules.keyboard_profile')
+-- 右侧修饰键统一为右 Command（2026-11 起），不再按键盘类型切换。
 
 local APP_GROUPS = {
   {
@@ -118,8 +118,8 @@ local function handleAppHotkey(event)
   local held = event:getRawEventData().CGEventData.flags & ALL_DEVICE_MASK
   local keycode = event:getKeyCode()
 
-  -- 显示映射的右侧修饰键跟随当前键盘变化，无需重建 eventtap
-  if keycode == hs.keycodes.map['\\'] and held == assert(modBit(keyboardProfile.rightModifier)) then
+  -- 映射面板热键固定为右 Command + \
+  if keycode == hs.keycodes.map['\\'] and held == assert(modBit('rCmd')) then
     showMappingAlert()
     return true
   end
