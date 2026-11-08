@@ -87,6 +87,31 @@ local function actionLabel(action)
 	return string.format('%s:%d', proxy.host, proxy.port)
 end
 
+-- nc -z -G 2：仅探测 TCP 连通性不传输数据，2 秒超时
+local function probePort(host, port, callback)
+	local task = hs.task.new('/usr/bin/nc', function(exitCode)
+		callback(exitCode == 0)
+	end, { '-z', '-G', '2', host, tostring(port) })
+	if task == nil or not task:start() then
+		callback(false)
+	end
+end
+
+-- 并行探测全部端点的连通性，全部结束后回调 { [端点下标] = true|false }
+local function probeAll(callback)
+	local reachable = {}
+	local remaining = #PROXIES
+	for i, proxy in ipairs(PROXIES) do
+		probePort(proxy.host, proxy.port, function(ok)
+			reachable[i] = ok
+			remaining = remaining - 1
+			if remaining == 0 then
+				callback(reachable)
+			end
+		end)
+	end
+end
+
 -- 当前本模块确认/设定的代理动作：PROXIES 下标（number）| 'off' | nil（未知）
 local currentAction = nil
 
@@ -304,16 +329,6 @@ refreshStatus()
 -- 第一个能连通的设为系统代理；都不可达则保持系统现状。
 local STARTUP_PROBE_DELAY = 5 -- 启动延迟（秒），等网络与代理客户端就绪
 
--- nc -z -G 2：仅探测 TCP 连通性不传输数据，2 秒超时
-local function probePort(host, port, callback)
-	local task = hs.task.new('/usr/bin/nc', function(exitCode)
-		callback(exitCode == 0)
-	end, { '-z', '-G', '2', host, tostring(port) })
-	if task == nil or not task:start() then
-		callback(false)
-	end
-end
-
 local function autoConnectProxy(index)
 	local proxy = PROXIES[index]
 	if proxy == nil then
@@ -352,6 +367,8 @@ return {
 	current = function()
 		return currentAction
 	end,
+	-- 并行探测各端点连通性：probeAll(fn(reachable))，reachable 为 { [端点下标] = bool }
+	probeAll = probeAll,
 	-- 按配置顺序排列的代理端点：{ { host, port }, ... }
 	proxies = PROXIES,
 }

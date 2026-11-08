@@ -427,31 +427,59 @@ local function proxyDescription()
   return '当前状态未知，回车选择…'
 end
 
-local function buildProxyChoices()
+-- reachable 为 feat_auto_proxy.probeAll 的探测结果（{ [端点下标] = bool }）：
+-- 仅列出可达端点，不可达的一律隐藏；「关闭代理」始终可选
+local function buildProxyChoices(reachable)
   proxyActionStore = {}
   local choices = {}
   local cur = autoProxy.current and autoProxy.current()
+  local shownEndpoints = 0
   for _, opt in ipairs(proxyOptions()) do
-    local id = #proxyActionStore + 1
-    proxyActionStore[id] = opt.action
-    local mark = (cur == opt.action) and '✓ ' or ''
-    table.insert(choices, {
-      text = mark .. opt.label,
-      subText = opt.detail,
-      __id = id,
+    local isEndpoint = opt.action ~= 'off'
+    if not isEndpoint or reachable == nil or reachable[opt.action] then
+      local id = #proxyActionStore + 1
+      proxyActionStore[id] = opt.action
+      local mark = (cur == opt.action) and '✓ ' or ''
+      table.insert(choices, {
+        text = mark .. opt.label,
+        subText = opt.detail,
+        __id = id,
+      })
+      if isEndpoint then
+        shownEndpoints = shownEndpoints + 1
+      end
+    end
+  end
+  if shownEndpoints == 0 and reachable ~= nil then
+    table.insert(choices, 1, {
+      text = '无可用代理端点',
+      subText = '配置中的端点均不可达',
     })
   end
   return choices
 end
 
 local function showProxyChooser()
-  -- 先用缓存状态立即展示，避免等待 networksetup 读取完成
-  proxyChooser:choices(buildProxyChoices())
+  -- 先展示占位行，同时并行探测各端点连通性、读取当前代理状态；
+  -- 两者都完成后重建列表，只保留可达端点（单端点探测超时 2 秒）
+  proxyChooser:choices({
+    { text = '正在检测代理可用性…', subText = '不可达的端点将被隐藏' },
+  })
   proxyChooser:show()
-  autoProxy.refreshStatus(function()
-    if proxyChooser:isVisible() then
-      proxyChooser:choices(buildProxyChoices())
+
+  local reachable, statusReady = nil, false
+  local function refresh()
+    if reachable and statusReady and proxyChooser:isVisible() then
+      proxyChooser:choices(buildProxyChoices(reachable))
     end
+  end
+  autoProxy.probeAll(function(result)
+    reachable = result
+    refresh()
+  end)
+  autoProxy.refreshStatus(function()
+    statusReady = true
+    refresh()
   end)
 end
 
